@@ -179,9 +179,17 @@ Para iniciar manualmente, execute `~/.local/bin/wallpaper-engine-start`. Para re
 
 ## Tecnologias e linguagens
 
-🐍 **Python 3** · 🟨 **JavaScript/GJS** · ⚙️ **C++20** · 🐚 **Bash** · 🟩 **QML** · 🏷️ **XML** · 📋 **JSON**
+<p>
+  <img src="https://img.shields.io/badge/Python_3-111111?style=flat-square&amp;logo=python&amp;logoColor=3776AB" alt="Python 3" height="40">
+  <img src="https://img.shields.io/badge/JavaScript_GJS-111111?style=flat-square&amp;logo=javascript&amp;logoColor=F7DF1E" alt="JavaScript/GJS" height="40">
+  <img src="https://img.shields.io/badge/C%2B%2B20-111111?style=flat-square&amp;logo=cplusplus&amp;logoColor=00599C" alt="C++20" height="40">
+  <img src="https://img.shields.io/badge/Bash-111111?style=flat-square&amp;logo=gnubash&amp;logoColor=4EAA25" alt="Bash" height="40">
+  <img src="https://img.shields.io/badge/QML-111111?style=flat-square&amp;logo=qt&amp;logoColor=41CD52" alt="QML / Qt" height="40">
+  <img src="https://img.shields.io/badge/XML-111111?style=flat-square&amp;logo=xml&amp;logoColor=F16529" alt="XML" height="40">
+  <img src="https://img.shields.io/badge/JSON-111111?style=flat-square&amp;logo=json&amp;logoColor=FFFFFF" alt="JSON" height="40">
+</p>
 
-A integração utiliza 🐧 Linux, 📦 Podman, GSettings, D-Bus e systemd de usuário.
+A integração utiliza Linux, Podman, GSettings, D-Bus e systemd de usuário.
 
 ## Testes
 
