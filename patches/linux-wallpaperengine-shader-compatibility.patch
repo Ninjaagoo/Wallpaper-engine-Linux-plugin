@@ -34,8 +34,254 @@ index 8d092d2..6c18d11 100644
 -}
 \ No newline at end of file
 +}
+diff --git a/src/WallpaperEngine/Render/Objects/Effects/CPass.cpp b/src/WallpaperEngine/Render/Objects/Effects/CPass.cpp
+index e93c293..f135d8e 100644
+--- a/src/WallpaperEngine/Render/Objects/Effects/CPass.cpp
++++ b/src/WallpaperEngine/Render/Objects/Effects/CPass.cpp
+@@ -1,8 +1,10 @@
+ #include "CPass.h"
++#include "WallpaperEngine/Data/Utils/ScopeGuard.h"
+ #include <sstream>
+ #include <utility>
+ 
+ #include "WallpaperEngine/Render/Helpers/ContextAware.h"
++#include "WallpaperEngine/Render/Helpers/Blending.h"
+ 
+ #include "WallpaperEngine/Data/Model/Effect.h"
+ #include "WallpaperEngine/Data/Model/Material.h"
+@@ -52,7 +54,12 @@ CPass::CPass (
+     m_pass (pass), m_binds (binds.has_value () ? binds.value ().get () : DEFAULT_BINDS),
+     m_override (override.has_value () ? override.value ().get () : DEFAULT_OVERRIDE), m_target (target),
+     m_blendingmode (pass.blending), m_vao (GL_NONE) {
+-    this->setupShaders ();
++    try {
++        this->setupShaders ();
++    } catch (const std::exception& erro) {
++        sLog.exception ("Object ", renderable.getId (), ", shader ",
++            m_override.shaderOverride.value_or (pass.shader), ": ", erro.what ());
++    }
+     glGenVertexArrays (1, &m_vao);
+ }
+ 
+@@ -128,8 +135,7 @@ void CPass::setupRenderFramebuffer () const {
+     // set texture blending
+     switch (this->getBlendingMode ()) {
+ 	case BlendingMode_Translucent:
+-	    glEnable (GL_BLEND);
+-	    glBlendFuncSeparate (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
++	    Helpers::setupTranslucentBlending ();
+ 	    break;
+ 	case BlendingMode_Additive:
+ 	    glEnable (GL_BLEND);
+@@ -543,7 +549,7 @@ const MaterialPass& CPass::getPass () const { return this->m_pass; }
+ 
+ std::optional<std::reference_wrapper<std::string>> CPass::getTarget () const { return this->m_target; }
+ 
+-Render::Shaders::Shader* CPass::getShader () const { return this->m_shader; }
++Render::Shaders::Shader* CPass::getShader () const { return this->m_shader.get (); }
+ 
+ GLuint CPass::getProgramID () const { return this->m_programID; }
+ 
+@@ -558,6 +564,7 @@ void CPass::setGeometryCallback (
+ GLuint CPass::compileShader (const char* shader, GLuint type) {
+     // reserve shaders in OpenGL
+     const GLuint shaderID = glCreateShader (type);
++    Data::Utils::ScopeGuard limpeza ([shaderID] { if (shaderID) glDeleteShader (shaderID); });
+ 
+     glShaderSource (shaderID, 1, &shader, nullptr);
+     glCompileShader (shaderID);
+@@ -590,6 +597,10 @@ GLuint CPass::compileShader (const char* shader, GLuint type) {
+ 	}
+     }
+ 
++    if (result != GL_TRUE) {
++        sLog.exception ("OpenGL shader compilation failed without a driver log.\n", shader);
++    }
++    limpeza.cancel ();
+     return shaderID;
+ }
+ 
+@@ -621,7 +632,7 @@ void CPass::setupShaders () {
+ 	passTextures.insert_or_assign (index, texture);
+     }
+ 
+-    this->m_shader = new Render::Shaders::Shader (
++    this->m_shader = std::make_unique<Render::Shaders::Shader> (
+ 	this->m_renderable.getAssetLocator (), shaderName, this->m_combos, this->m_override.combos, passTextures,
+ 	this->m_override.textures, this->m_override.constants
+     );
+@@ -631,9 +642,12 @@ void CPass::setupShaders () {
+ 
+     // compile the shaders
+     const GLuint vertexShaderID = compileShader (vertex.c_str (), GL_VERTEX_SHADER);
++    Data::Utils::ScopeGuard limparVertice ([vertexShaderID] { glDeleteShader (vertexShaderID); });
+     const GLuint fragmentShaderID = compileShader (fragment.c_str (), GL_FRAGMENT_SHADER);
++    Data::Utils::ScopeGuard limparFragmento ([fragmentShaderID] { glDeleteShader (fragmentShaderID); });
+     // create the final program
+     this->m_programID = glCreateProgram ();
++    Data::Utils::ScopeGuard limparPrograma ([this] { glDeleteProgram (m_programID); m_programID = 0; });
+     // link the shaders together
+     glAttachShader (this->m_programID, vertexShaderID);
+     glAttachShader (this->m_programID, fragmentShaderID);
+@@ -664,6 +678,10 @@ void CPass::setupShaders () {
+ 	}
+     }
+ 
++    if (result != GL_TRUE) {
++        sLog.exception ("OpenGL shader linking failed without a driver log");
++    }
++
+ #if !NDEBUG
+     glObjectLabel (GL_PROGRAM, this->m_programID, -1, shaderName.c_str ());
+     glObjectLabel (GL_SHADER, vertexShaderID, -1, (shaderName + ".vert").c_str ());
+@@ -674,9 +692,6 @@ void CPass::setupShaders () {
+     glDetachShader (this->m_programID, vertexShaderID);
+     glDetachShader (this->m_programID, fragmentShaderID);
+ 
+-    glDeleteShader (vertexShaderID);
+-    glDeleteShader (fragmentShaderID);
+-
+     // first setup the default values, these will be overwritten by future values
+     this->setupShaderVariables ();
+     // setup uniforms
+@@ -687,6 +702,7 @@ void CPass::setupShaders () {
+     // support three textures for now
+     this->g_Texture0Rotation = glGetUniformLocation (this->m_programID, "g_Texture0Rotation");
+     this->g_Texture0Translation = glGetUniformLocation (this->m_programID, "g_Texture0Translation");
++    limparPrograma.cancel ();
+ }
+ 
+ void CPass::setupAttributes () {
+diff --git a/src/WallpaperEngine/Render/Objects/Effects/CPass.h b/src/WallpaperEngine/Render/Objects/Effects/CPass.h
+index 4c3ab16..00f1f37 100644
+--- a/src/WallpaperEngine/Render/Objects/Effects/CPass.h
++++ b/src/WallpaperEngine/Render/Objects/Effects/CPass.h
+@@ -195,14 +195,14 @@ private:
+      */
+     std::map<int, std::shared_ptr<TextureChainEntry>> m_textures = {};
+ 
+-    Render::Shaders::Shader* m_shader = nullptr;
++    std::unique_ptr<Render::Shaders::Shader> m_shader;
+ 
+     std::shared_ptr<const CFBO> m_drawTo = nullptr;
+     std::shared_ptr<const TextureProvider> m_input = nullptr;
+     std::shared_ptr<const TextureProvider> m_previousInput = nullptr;
+     glm::vec4 m_texture0Resolution = {};
+ 
+-    GLuint m_programID;
++    GLuint m_programID = 0;
+ 
+     // shader variables used temporary
+     GLint g_Texture0Rotation;
+diff --git a/src/WallpaperEngine/Render/Shaders/GLSLContext.cpp b/src/WallpaperEngine/Render/Shaders/GLSLContext.cpp
+index dd4f4d4..deacb40 100644
+--- a/src/WallpaperEngine/Render/Shaders/GLSLContext.cpp
++++ b/src/WallpaperEngine/Render/Shaders/GLSLContext.cpp
+@@ -1,4 +1,6 @@
+ #include "GLSLContext.h"
++#include "Compatibility.h"
++#include <stdexcept>
+ #include "WallpaperEngine/Logging/Log.h"
+ 
+ #include <cassert>
+@@ -132,9 +134,23 @@ GLSLContext& GLSLContext::get () {
+ }
+ 
+ std::pair<std::string, std::string> GLSLContext::toGlsl (const std::string& vertex, const std::string& fragment) {
++    const auto preprocess = [] (const std::string& source, EShLanguage stage) {
++        glslang::TShader shader (stage);
++        const char* text = source.c_str ();
++        shader.setStrings (&text, 1);
++        glslang::TShader::ForbidIncluder includer;
++        std::string result;
++        if (!shader.preprocess (&BuiltInResource, 330, ECoreProfile, false, false, EShMsgDefault, &result, includer)) {
++            throw std::runtime_error (std::string (stage == EShLangVertex ? "Vertex" : "Fragment")
++                + " shader preprocessing failed:\n" + shader.getInfoLog ());
++        }
++        return result;
++    };
++    const auto vertexCode = preprocess (vertex, EShLangVertex);
++    const auto fragmentCode = matchVectorInputs (vertexCode, preprocess (fragment, EShLangFragment));
+     glslang::TShader vertexShader (EShLangVertex);
+ 
+-    const char* vertexSource = vertex.c_str ();
++    const char* vertexSource = vertexCode.c_str ();
+     vertexShader.setStrings (&vertexSource, 1);
+     vertexShader.setEntryPoint ("main");
+     vertexShader.setEnvInput (glslang::EShSourceGlsl, EShLangVertex, glslang::EShClientOpenGL, 330);
+@@ -144,12 +160,11 @@ std::pair<std::string, std::string> GLSLContext::toGlsl (const std::string& vert
+     vertexShader.setAutoMapBindings (true);
+ 
+     if (!vertexShader.parse (&BuiltInResource, 100, false, EShMsgDefault)) {
+-	sLog.error ("GLSL vertex unit parsing Failed: ", vertexShader.getInfoLog ());
+-	return { "", "" };
++        throw std::runtime_error (std::string ("Vertex shader parsing failed:\n") + vertexShader.getInfoLog () + "\n" + vertexCode);
+     }
+     glslang::TShader fragmentShader (EShLangFragment);
+ 
+-    const char* fragmentSource = fragment.c_str ();
++    const char* fragmentSource = fragmentCode.c_str ();
+     fragmentShader.setStrings (&fragmentSource, 1);
+     fragmentShader.setEntryPoint ("main");
+     fragmentShader.setEnvInput (glslang::EShSourceGlsl, EShLangFragment, glslang::EShClientOpenGL, 330);
+@@ -159,16 +174,17 @@ std::pair<std::string, std::string> GLSLContext::toGlsl (const std::string& vert
+     fragmentShader.setAutoMapBindings (true);
+ 
+     if (!fragmentShader.parse (&BuiltInResource, 100, false, EShMsgDefault)) {
+-	sLog.error ("GLSL fragment unit parsing Failed: ", fragmentShader.getInfoLog ());
+-	return { "", "" };
++        throw std::runtime_error (std::string ("Fragment shader parsing failed:\n") + fragmentShader.getInfoLog () + "\n" + fragmentCode);
+     }
+     glslang::TProgram program;
+     program.addShader (&vertexShader);
+     program.addShader (&fragmentShader);
+ 
+     if (!program.link (EShMsgDefault)) {
+-	sLog.error ("Program Linking Failed: ", program.getInfoLog ());
+-	return { "", "" };
++        throw std::runtime_error (std::string ("Shader interface linking failed:\n") + program.getInfoLog ());
++    }
++    if (!program.mapIO ()) {
++        throw std::runtime_error (std::string ("Shader interface mapping failed:\n") + program.getInfoLog ());
+     }
+ 
+     std::vector<uint32_t> spirv;
+@@ -179,6 +195,20 @@ std::pair<std::string, std::string> GLSLContext::toGlsl (const std::string& vert
+     options.version = 330;
+     options.es = false;
+     vertexCompiler.set_common_options (options);
++    // Binding decorations on ordinary OpenGL uniforms are not valid GLSL.
++    // The renderer resolves uniform locations and sampler units by name.
++    const auto prepareUniforms = [] (spirv_cross::CompilerGLSL& compiler) {
++        const auto resources = compiler.get_shader_resources ();
++        for (const auto& uniform : resources.gl_plain_uniforms) {
++            compiler.unset_decoration (uniform.id, spv::DecorationBinding);
++            compiler.unset_decoration (uniform.id, spv::DecorationLocation);
++        }
++        for (const auto& sampler : resources.sampled_images) {
++            compiler.unset_decoration (sampler.id, spv::DecorationBinding);
++            compiler.unset_decoration (sampler.id, spv::DecorationLocation);
++        }
++    };
++    prepareUniforms (vertexCompiler);
+ 
+     spirv.clear ();
+     glslang::GlslangToSpv (*program.getIntermediate (EShLangFragment), spirv);
+@@ -187,9 +217,10 @@ std::pair<std::string, std::string> GLSLContext::toGlsl (const std::string& vert
+     options.version = 330;
+     options.es = false;
+     fragmentCompiler.set_common_options (options);
++    prepareUniforms (fragmentCompiler);
+ 
+     return { vertexCompiler.compile () + "#if 0\n" + vertex + "\n#endif",
+ 	     fragmentCompiler.compile () + "#if 0\n" + fragment + "\n#endif" };
+ }
+ 
+-std::unique_ptr<GLSLContext> GLSLContext::sInstance = nullptr;
+\ No newline at end of file
++std::unique_ptr<GLSLContext> GLSLContext::sInstance = nullptr;
 diff --git a/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp b/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
-index fcc03fc..58981d4 100644
+index fcc03fc..6a1e42e 100644
 --- a/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
 +++ b/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
 @@ -1,4 +1,5 @@
@@ -44,30 +290,123 @@ index fcc03fc..58981d4 100644
  
  #include "WallpaperEngine/Logging/Log.h"
  #include <exception>
-@@ -717,6 +718,12 @@ const std::string& ShaderUnit::compile () {
-     this->m_final
- 	+= this->applyFragmentTexCoordCompatibility (this->applyLinkedVaryingCompatibility (this->m_preprocessed));
+@@ -376,44 +377,6 @@ std::string ShaderUnit::generateLightingV1 () const {
+ 	   "// end of generated module LightingV1\n";
+ }
  
+-std::string ShaderUnit::applyLinkedVaryingCompatibility (std::string source) const {
+-    if (this->m_type != GLSLContext::UnitType_Vertex || this->m_link == nullptr) {
+-	return source;
+-    }
+-
+-    std::regex fragmentVec4Varying (R"(\bvarying\s+vec4\s+([A-Za-z_][A-Za-z0-9_]*)\s*;)");
+-    std::smatch varyingMatch;
+-    std::string linked = this->m_link->m_preprocessed;
+-    size_t linkedOffset = 0;
+-
+-    while (std::regex_search (linked.cbegin () + linkedOffset, linked.cend (), varyingMatch, fragmentVec4Varying)) {
+-	const std::string name = varyingMatch[1].str ();
+-	linkedOffset += varyingMatch.position () + varyingMatch.length ();
+-
+-	const std::regex vertexVec2Decl ("\\bvarying\\s+vec2\\s+" + name + "\\s*;");
+-	if (!std::regex_search (source, vertexVec2Decl)) {
+-	    continue;
+-	}
+-
+-	source = std::regex_replace (source, vertexVec2Decl, "varying vec4 " + name + ";");
+-
+-	const std::regex assignment ("(^|\\n)([ \\t]*)" + name + "\\s*=\\s*([^;\\n]+);");
+-	std::smatch assignmentMatch;
+-	size_t offset = 0;
+-	while (std::regex_search (source.cbegin () + offset, source.cend (), assignmentMatch, assignment)) {
+-	    const std::string prefix = assignmentMatch[1].str ();
+-	    const std::string indent = assignmentMatch[2].str ();
+-	    const std::string expression = assignmentMatch[3].str ();
+-	    const std::string replacement = prefix + indent + name + " = vec4(" + expression + ", 0.0, 1.0);";
+-	    const size_t position = offset + assignmentMatch.position ();
+-	    source.replace (position, assignmentMatch.length (), replacement);
+-	    offset = position + replacement.length ();
+-	}
+-    }
+-
+-    return source;
+-}
+-
+ std::string ShaderUnit::applyFragmentTexCoordCompatibility (std::string source) const {
+     if (this->m_type != GLSLContext::UnitType_Fragment) {
+ 	return source;
+@@ -715,7 +678,13 @@ const std::string& ShaderUnit::compile () {
+ 
+     // this should be the rest of the shader
+     this->m_final
+-	+= this->applyFragmentTexCoordCompatibility (this->applyLinkedVaryingCompatibility (this->m_preprocessed));
++	+= this->applyFragmentTexCoordCompatibility (this->m_preprocessed);
++
 +    // Some Workshop shaders use HLSL identifiers that are reserved in GLSL.
 +    this->m_final = std::regex_replace (this->m_final, std::regex (R"(\binput\b)"), "we_shaderInput");
 +    if (this->m_type == GLSLContext::UnitType_Fragment) {
 +	this->m_final = writableTexCoord (this->m_final);
 +    }
-+
+ 
      // the pass itself handles shader compilation, the unit doesn't have enough information for this step
      return this->m_final;
- }
+diff --git a/src/WallpaperEngine/Render/Shaders/ShaderUnit.h b/src/WallpaperEngine/Render/Shaders/ShaderUnit.h
+index 0a5d5d6..f29b14e 100644
+--- a/src/WallpaperEngine/Render/Shaders/ShaderUnit.h
++++ b/src/WallpaperEngine/Render/Shaders/ShaderUnit.h
+@@ -96,10 +96,6 @@ private:
+      * @return GLSL code defining PerformLighting_V1
+      */
+     [[nodiscard]] std::string generateLightingV1 () const;
+-    /**
+-     * Adjusts vertex varyings when a workshop shader declares a narrower vertex type than its fragment peer.
+-     */
+-    [[nodiscard]] std::string applyLinkedVaryingCompatibility (std::string source) const;
+     /**
+      * Adjusts fragment shaders that use wide texture coordinates as vec2 values in Wallpaper Engine effects.
+      */
 diff --git a/src/WallpaperEngine/Render/Shaders/Compatibility.h b/src/WallpaperEngine/Render/Shaders/Compatibility.h
 new file mode 100644
-index 0000000..5d493c8
+index 0000000..55d18af
 --- /dev/null
 +++ b/src/WallpaperEngine/Render/Shaders/Compatibility.h
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,54 @@
 +#pragma once
 +#include <regex>
 +#include <string>
 +
 +namespace WallpaperEngine::Render::Shaders {
++// Called only after preprocessing, so inactive #if branches cannot change the
++// interface. Keep the vertex interface and convert to the fragment's local type.
++inline std::string matchVectorInputs (const std::string& vertex, std::string fragment) {
++    const std::regex output (R"(\bout\s+(?:highp\s+|mediump\s+|lowp\s+)?vec([234])\s+([A-Za-z_]\w*)\s*;)");
++    for (auto it = std::sregex_iterator (vertex.begin (), vertex.end (), output);
++         it != std::sregex_iterator (); ++it) {
++        const std::string name = (*it)[2];
++        const int width = std::stoi ((*it)[1]);
++        const std::regex input ("\\bin\\s+(?:highp\\s+|mediump\\s+|lowp\\s+)?vec([234])\\s+" + name + "\\s*;");
++        std::smatch match;
++        if (!std::regex_search (fragment, match, input)) continue;
++        const int expected = std::stoi (match[1]);
++        if (expected == width) continue;
++        std::string local = "we_local_" + name;
++        while (fragment.find (local) != std::string::npos) local += "_";
++        fragment = std::regex_replace (fragment, std::regex ("\\b" + name + "\\b"), local);
++        const std::regex localDeclaration ("\\bin\\s+(?:highp\\s+|mediump\\s+|lowp\\s+)?vec[234]\\s+" + local + "\\s*;");
++        fragment = std::regex_replace (fragment, localDeclaration,
++            "in vec" + std::to_string (width) + " " + name + ";\nvec" + std::to_string (expected) + " " + local + ";");
++        std::string conversion = name;
++        if (width > expected) conversion += "." + std::string ("xyzw", expected);
++        else {
++            conversion = "vec" + std::to_string (expected) + "(" + name;
++            for (int i = width; i < expected; ++i) conversion += i == 3 ? ", 1.0" : ", 0.0";
++            conversion += ")";
++        }
++        fragment = std::regex_replace (fragment, std::regex (R"(\bvoid\s+main\s*\(\s*(?:void\s*)?\)\s*\{)"),
++            "$&\n" + local + " = " + conversion + ";", std::regex_constants::format_first_only);
++    }
++    return fragment;
++}
 +// HLSL permits assigning to interpolated parameters. GLSL fragment inputs are
 +// read-only: keep the interface name and redirect uses to a per-fragment copy.
 +inline std::string writableTexCoord (std::string source) {
@@ -84,5 +423,24 @@ index 0000000..5d493c8
 +                                "varying $1 v_TexCoord;\n$1 we_localTexCoord;");
 +    return std::regex_replace (source, mainFunction, "$&\nwe_localTexCoord = v_TexCoord;",
 +                               std::regex_constants::format_first_only);
++}
++}
+diff --git a/src/WallpaperEngine/Render/Helpers/Blending.h b/src/WallpaperEngine/Render/Helpers/Blending.h
+new file mode 100644
+index 0000000..b561ee5
+--- /dev/null
++++ b/src/WallpaperEngine/Render/Helpers/Blending.h
+@@ -0,0 +1,13 @@
++#pragma once
++
++#include <GL/glew.h>
++
++namespace WallpaperEngine::Render::Helpers {
++// RGB uses straight source alpha. Coverage must use source-over rather than
++// multiplying the source alpha by itself, which erodes intermediate masks.
++inline void setupTranslucentBlending () {
++    glEnable (GL_BLEND);
++    glBlendEquationSeparate (GL_FUNC_ADD, GL_FUNC_ADD);
++    glBlendFuncSeparate (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 +}
 +}

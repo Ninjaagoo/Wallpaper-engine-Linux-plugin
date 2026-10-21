@@ -138,23 +138,20 @@ def apply_selection(arquivo):
         ULTIMA_SELECAO.write_text(json.dumps(resultado, ensure_ascii=False, indent=2))
         logging.info('Selection applied: %s', resultado)
         return
-    # Restart only our extension, so this also works with the currently loaded
-    # revision whose asynchronous settings restart can otherwise stop playback.
+    # Batch settings changes; the extension serializes renderer shutdown/start.
+    # Disabling/re-enabling the extension here would race its asynchronous stop.
     allow_current_gnome_session()
-    subprocess.run(['gnome-extensions', 'disable', UUID], check=True)
     try:
-        try:
-            sync_static_background(pasta, projeto)
-        except (OSError, ValueError):
-            logging.exception('Não foi possível sincronizar a prévia estática')
-        gset('workshop-path', str(pasta.parent))
-        gset('wallpaper-id', pasta.name)
-        gset('engine', 'wallpaperengine' if tipo == 'scene' else 'mpv')
-        if tipo == 'video':
-            gset('video-path', str(midia))
-        gset('enabled', True)
-    finally:
-        subprocess.run(['gnome-extensions', 'enable', UUID], check=True)
+        sync_static_background(pasta, projeto)
+    except (OSError, ValueError):
+        logging.exception('Não foi possível sincronizar a prévia estática')
+    gset('workshop-path', str(pasta.parent))
+    gset('wallpaper-id', pasta.name)
+    gset('engine', 'wallpaperengine' if tipo == 'scene' else 'mpv')
+    if tipo == 'video':
+        gset('video-path', str(midia))
+    gset('enabled', True)
+    subprocess.run(['gnome-extensions', 'enable', UUID], check=True)
     subprocess.run(['gsettings', 'set', 'org.gnome.desktop.interface', 'accent-color', destaque], check=True)
     resultado = {'id': pasta.name, 'title': projeto.get('title'), 'type': tipo, 'accent': destaque}
     ULTIMA_SELECAO.write_text(json.dumps(resultado, ensure_ascii=False, indent=2))

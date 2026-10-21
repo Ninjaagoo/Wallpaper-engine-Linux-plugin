@@ -63,7 +63,7 @@ __WALLPAPER_ENGINE_PAYLOAD__
 
 def excluded(informacoes):
     partes = Path(informacoes.name).parts
-    if any(parte in ('__pycache__', '.vscode', 'build', '.cache', 'backups') for parte in partes):
+    if any(parte in ('__pycache__', '.vscode', 'build', '.cache', 'backups', '.git') for parte in partes):
         return None
     if informacoes.name.endswith(('static-background-before.json', 'system-colors-before.json')):
         return None
@@ -75,17 +75,17 @@ def export_runtime_image(destino):
     subprocess.run(['podman', 'save', '--format', 'oci-archive', '--output', str(destino), IMAGEM], check=True)
 
 
-def create_payload(conteudo, imagem, trabalho):
+def create_payload(conteudo, imagem, trabalho, ambiente_execucao=AMBIENTE_EXECUCAO):
     manifesto = trabalho / 'manifest.json'
     manifesto.write_text(json.dumps({'machine': platform.machine(), 'image': IMAGEM, 'format': 1}, indent=2))
     print('Compactando runtime, fontes e dependências…', flush=True)
     with tarfile.open(conteudo, 'w:gz', compresslevel=3) as arquivo_compactado:
         arquivo_compactado.add(PROJETO / 'wallpaper-linux', arcname='app/wallpaper-linux', filter=excluded)
         arquivo_compactado.add(PROJETO / 'linux-wallpaperengine', arcname='app/linux-wallpaperengine', filter=excluded)
-        for nome in ('README.md', 'Containerfile', 'tools', 'patches', '.gitmodules', 'install.sh'):
+        for nome in ('README.md', 'Containerfile', 'tools', 'patches', 'docs', '.gitmodules', 'install.sh'):
             arquivo_compactado.add(PROJETO / nome, arcname='app/' + nome, filter=excluded)
         arquivo_compactado.add(PROJETO / 'tools/package-bootstrap.py', arcname='package-bootstrap.py')
-        arquivo_compactado.add(AMBIENTE_EXECUCAO, arcname='runtime')
+        arquivo_compactado.add(ambiente_execucao, arcname='runtime')
         arquivo_compactado.add(imagem, arcname='runtime-image.tar')
         arquivo_compactado.add(manifesto, arcname='manifest.json')
         licenca_cef = Path.home() / '.cache/wallpaper-engine/intellisense/cef/LICENSE.txt'
@@ -116,8 +116,9 @@ def write_checksum(destino):
 def main():
     analisador = argparse.ArgumentParser(description=__doc__)
     analisador.add_argument('--output', dest='saida', type=Path, default=PROJETO / 'dist' / NOME_ARQUIVO)
+    analisador.add_argument('--runtime', dest='ambiente_execucao', type=Path, default=AMBIENTE_EXECUCAO, help='Runtime preparado para empacotar sem alterar a instalação em uso')
     argumentos_cli = analisador.parse_args()
-    if not (AMBIENTE_EXECUCAO / 'linux-wallpaperengine').is_file():
+    if not (argumentos_cli.ambiente_execucao / 'linux-wallpaperengine').is_file():
         analisador.error('Compile e instale o runtime antes de gerar o pacote offline.')
     if platform.machine() != 'x86_64':
         analisador.error('Este gerador está configurado para a distribuição x86_64.')
@@ -127,7 +128,7 @@ def main():
         imagem = trabalho / 'runtime-image.tar'
         conteudo = trabalho / 'payload.tar.gz'
         export_runtime_image(imagem)
-        create_payload(conteudo, imagem, trabalho)
+        create_payload(conteudo, imagem, trabalho, argumentos_cli.ambiente_execucao)
         write_executable(conteudo, argumentos_cli.saida)
     write_checksum(argumentos_cli.saida)
     print(f'Pacote criado: {argumentos_cli.saida} ({argumentos_cli.saida.stat().st_size / 1024**3:.2f} GiB)', flush=True)

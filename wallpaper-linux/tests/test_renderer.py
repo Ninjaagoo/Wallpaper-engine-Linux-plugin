@@ -2,7 +2,10 @@
 import importlib.machinery
 import importlib.util
 import unittest
+import subprocess
+import sys
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 CAMINHO = Path(__file__).resolve().parents[1] / 'wallpaper-renderer'
 CARREGADOR = importlib.machinery.SourceFileLoader('renderizador', str(CAMINHO))
@@ -16,6 +19,28 @@ def matrix(a, b, c, d):
 
 
 class TestesVideo(unittest.TestCase):
+    def test_ciclo_de_vida_sem_processos_sobrepostos(self):
+        subprocess.run(['node', str(CAMINHO.parents[1] / 'tools/test-renderer-lifecycle.mjs')],
+                       check=True, capture_output=True, text=True)
+
+    def test_selecao_nao_desativa_extensao_durante_troca(self):
+        sys.path.insert(0, str(CAMINHO.parent))
+        especificacao = importlib.util.spec_from_file_location('sincronizacao_teste', CAMINHO.parent / 'selection-sync.py')
+        modulo = importlib.util.module_from_spec(especificacao)
+        especificacao.loader.exec_module(modulo)
+        with patch.multiple(modulo, resolve_selection=MagicMock(return_value=(Path('/biblioteca/123'),
+                            {'title': 'Teste'}, 'scene', Path('/biblioteca/123/scene.json'))),
+                            choose_accent=MagicMock(return_value='slate'),
+                            detect_desktop=MagicMock(return_value='gnome'),
+                            allow_current_gnome_session=MagicMock(),
+                            sync_static_background=MagicMock(), gset=MagicMock(),
+                            ULTIMA_SELECAO=MagicMock()), patch.object(modulo.subprocess, 'run') as executar:
+            modulo.apply_selection('/biblioteca/123/project.json')
+            comandos = [chamada.args[0] for chamada in executar.call_args_list]
+            self.assertNotIn(['gnome-extensions', 'disable', modulo.UUID], comandos)
+            self.assertIn(['gnome-extensions', 'enable', modulo.UUID], comandos)
+            modulo.gset.assert_any_call('wallpaper-id', '123')
+
     def test_resolucao_fisica_4k_com_escala_fracionada(self):
         monitor = ('DP-1', 'vendor', 'model', 'serial')
         estado = (1, [(monitor, [('4k', 3840, 2160, 60, 1, [], {'is-current': True})])],

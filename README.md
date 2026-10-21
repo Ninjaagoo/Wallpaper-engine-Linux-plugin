@@ -1,45 +1,95 @@
 # Wallpaper Engine Linux
 
-**Seus wallpapers da Steam na área de trabalho do Linux.**
+**Wallpapers da Steam na área de trabalho do Linux — projeto experimental.**
 
-Integração comunitária desenvolvida e adaptada por **ninjaagoo**, com base em projetos de código aberto. Permite escolher cenas e vídeos no aplicativo oficial do Wallpaper Engine e aplicar a seleção no Linux, com integração ao desktop, cores do sistema e personalização da tela de login do GNOME.
+Integração comunitária desenvolvida e adaptada por **ninjaagoo**, a partir de projetos de código aberto. Usa o aplicativo oficial do Wallpaper Engine para selecionar cenas e vídeos e aplica a seleção no desktop Linux.
 
-**Ambiente validado:** Bazzite com GNOME 50, Wayland e GPU Intel. O suporte adicional ao KDE é experimental; no XFCE, a integração aplica somente uma imagem estática.
+> **Em desenvolvimento:** não é um produto oficial do Wallpaper Engine e ainda não reproduz todos os recursos do motor original. Algumas cenas podem apresentar partes ausentes, cores incorretas, efeitos diferentes ou modelos deformados. Compilar os shaders sem erros não garante fidelidade visual.
 
-[Funcionalidades](#funcionalidades) · [Instalação](#instalação) · [Como usar](#como-usar) · [Tela de login — GDM](#tela-de-login--gdm) · [Compatibilidade](#compatibilidade) · [Créditos](#desenvolvimento-e-créditos)
+O ambiente testado é **Bazzite, GNOME 50, Wayland e GPU Intel**. Consulte a tabela de [Compatibilidade](#compatibilidade) para os demais ambientes.
 
-## Funcionalidades
+[Instalar](#instalação) · [Como usar](#como-usar) · [Compatibilidade](#compatibilidade) · [Diagnóstico](#diagnóstico-e-atualização) · [Créditos](#desenvolvimento-e-créditos)
 
-| Recurso | O que faz |
+## Exemplos visuais
+
+| Captura de teste local | Exemplo do motor original |
 |---|---|
-| Seleção imediata | Aplica o wallpaper assim que você o seleciona na biblioteca oficial, antes de pressionar **OK**. |
-| Cenas e vídeos | Reconhece conteúdo desses tipos baixado da Workshop. |
-| Desktop e pesquisa GNOME | Exibe a animação na área de trabalho e na visão geral/pesquisa do GNOME. |
-| Cores combinando | No GNOME, escolhe uma cor de destaque a partir da prévia do wallpaper. |
-| Fundos sincronizados | Atualiza os fundos estáticos dos temas claro e escuro e o fundo de bloqueio do GNOME, evitando a imagem antiga nas transições. |
-| Tela de login | Com a integração opcional do GDM instalada, usa a prévia estática selecionada e acompanha as próximas trocas. |
-| Início automático opcional | Ao final da instalação, pergunta se a integração deve iniciar ao entrar na sessão. |
-| Qualidade e reprodução | No GNOME, oferece ajustes de FPS, áudio, monitor e enquadramento; o lançador considera a resolução física do monitor. |
-| Convivência com aplicativos | Inclui adaptações de foco e posicionamento para que a janela do renderizador não interfira na minimização dos aplicativos. |
-| Instalação acompanhada | Mostra as etapas, porcentagens coloridas e a confirmação de conclusão. |
-| Executável offline | Reúne fontes, renderizador compilado e imagem de dependências em um arquivo `.run` para Linux x86_64. |
-| Descoberta da Steam | Reconhece instalações tradicionais, Flatpak e bibliotecas adicionais declaradas em `libraryfolders.vdf`. |
+| ![Dark Queen renderizado em teste local 4K](docs/media/dark-queen-4k.png) | ![Cena de NieR Automata demonstrada pelo motor original](docs/media/wallpaper-exemplo.png) |
+| **Dark Queen [4K]** — captura do renderizador local em 3840 × 2160, usando Xvfb/Mesa. | **NieR Automata** — quadro da demonstração publicada pelo projeto base. |
 
-O aplicativo oficial continua sendo usado para escolher wallpapers. Esta integração não substitui a instalação do Wallpaper Engine na Steam.
+### Wallpaper em animação
 
-## Tecnologias e linguagens
+![Demonstração animada de uma cena no linux-wallpaperengine](docs/media/wallpaper-animado.gif)
 
-| Linguagem ou tecnologia | Uso no projeto |
-|---|---|
-| **Python 3** | Instalador, detecção do desktop, sincronização da seleção, tratamento de imagens, inicialização e testes. |
-| **JavaScript / GJS** | Extensões e preferências do GNOME, integração com o GDM e comunicação com a interface oficial. |
-| **C++20** | Renderizador `linux-wallpaperengine`, com adaptações locais de janela e leitura de cenas. |
-| **Bash** | Cabeçalho do instalador executável e preparação da extração do pacote. |
-| **QML** | Addon de terceiros usado na integração experimental com KDE Plasma 6. |
-| **XML e JSON** | Esquemas GSettings, protocolos, metadados e configurações. |
-| **Podman e Containerfile** | Compilação e execução do renderizador com dependências isoladas. |
-| **GSettings, D-Bus e systemd de usuário** | Preferências, comunicação com o desktop e gerenciamento do serviço. |
-| **Pillow, PyGObject e Node.js** | Processamento da prévia, acesso às APIs GNOME e validação do JavaScript da interface. |
+O GIF e o quadro de NieR Automata vêm de [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine/tree/b016d7d1fdcf4e5fd2f9c9fa420a8aaa07fee02d/docs/images). São demonstrações do motor original, não gravações desta integração no GNOME. A captura local documenta um teste específico; não garante compatibilidade com todos os wallpapers. As imagens pertencem aos respectivos autores.
+
+## Instalação
+
+### 1. Antes de começar
+
+Você precisa ter:
+
+- **Linux x86_64** e um [desktop compatível](#compatibilidade).
+- **Steam e Wallpaper Engine instalados pela sua conta**, com pelo menos uma cena ou vídeo da Workshop já baixado. O plugin não inclui o aplicativo pago nem os wallpapers.
+- **Bash, `curl`, `tar`, `sha256sum`, `awk` e `mktemp`** disponíveis para executar o comando de download.
+- Conexão com a internet e espaço para baixar e extrair **vários GB** de runtime e dependências.
+- Acesso a **`sudo`**, caso faltem pacotes do sistema.
+
+O instalador tenta instalar Python 3, Pillow, Node.js, Podman e as ferramentas necessárias ao desktop quando ausentes. Os gerenciadores previstos são `apt-get`, `dnf`, `pacman` e `rpm-ostree`; a instalação real em todas essas distribuições ainda não foi validada. Outros sistemas podem exigir preparação manual.
+
+### 2. Execute este comando
+
+Copie a linha inteira no terminal, usando seu usuário normal, **sem colocar `sudo` no início**:
+
+```bash
+arquivo_we=$(mktemp) && curl -fL https://raw.githubusercontent.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/v0.2.2-rc.1/install.sh -o "$arquivo_we" && bash "$arquivo_we"; resultado_we=$?; [ -z "${arquivo_we:-}" ] || rm -f "$arquivo_we"; (exit "$resultado_we")
+```
+
+Esse comando instala a pré-lançamento experimental **v0.2.2-rc.1**: baixa o pacote, confere o SHA-256, prepara as dependências e instala a integração. Ele inclui as adaptações atuais de shaders, composição e troca de wallpaper, ainda sujeitas às limitações descritas acima.
+
+Se necessário, o instalador solicita autenticação de administrador e reutiliza a autorização durante a execução. As etapas mostram porcentagens: vermelho no início, laranja de 50–79% e verde de 80–100%. Elas representam etapas concluídas, não tempo restante.
+
+**No Bazzite e em outros sistemas `rpm-ostree`:** se forem adicionados pacotes ao sistema, reinicie e execute o mesmo comando para concluir. O instalador avisa e não reinicia o computador sozinho.
+
+### 3. Conclua e escolha seu wallpaper
+
+1. Ao aparecer **“Deseja que o Wallpaper Engine inicie junto com o sistema?”**, responda `s` para iniciar ao entrar na sessão ou `n` para abrir manualmente pelo menu.
+2. Aguarde a mensagem **“Concluído!”**. Se o instalador informar um erro, consulte [Diagnóstico](#diagnóstico-e-atualização).
+3. No GNOME, salve seu trabalho, saia da conta e entre novamente para carregar a extensão instalada ou atualizada.
+4. Siga os passos de [Como usar](#como-usar) para selecionar o wallpaper.
+
+A integração fica na pasta oculta **`~/.local/share/wallpaper-engine/`** e funciona independentemente da pasta do projeto. Consulte [Diagnóstico](#diagnóstico-e-atualização) para localizar os logs.
+
+### Alternativa: baixar o executável manualmente
+
+Baixe o arquivo **`WallpaperEngine-Linux-x86_64.run`** em [Releases](https://github.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/releases). Na pasta onde ele foi salvo:
+
+```bash
+bash WallpaperEngine-Linux-x86_64.run --install-deps
+```
+
+Esse é o mesmo fluxo de instalação, sem precisar clonar ou compilar o projeto. O pacote inclui o renderizador e a imagem de dependências; **não é um AppImage autossuficiente** e utiliza Podman no hospedeiro.
+
+Para conferir o pacote ou verificar o ambiente sem instalar:
+
+```bash
+bash WallpaperEngine-Linux-x86_64.run --verify
+bash WallpaperEngine-Linux-x86_64.run --check
+```
+
+Para compilar ou instalar pelos fontes, consulte [Opções avançadas](#opções-avançadas).
+
+## Como usar
+
+1. Abra o Wallpaper Engine pela Steam e aguarde o download dos wallpapers da Workshop.
+2. Selecione uma **cena ou vídeo** na biblioteca. A integração aplica a seleção antes de pressionar **OK**.
+3. No GNOME, abra **Wallpaper Engine Linux** pelo menu para ajustar FPS, áudio, monitor e enquadramento.
+
+Com o início automático ativado, a última seleção é carregada ao entrar na sessão, sem precisar abrir o aplicativo oficial novamente.
+
+Para cenas, comece com **30 FPS** para reduzir o consumo. Vídeos preservam sua taxa de quadros original. A saída acompanha a resolução física do monitor; usar conteúdo 4K não elimina as limitações do motor nem aumenta a resolução da tela.
+
+As preferências existentes são preservadas na reinstalação. O padrão para novas instalações é 30 FPS.
 
 ## Compatibilidade
 
@@ -54,374 +104,104 @@ O aplicativo oficial continua sendo usado para escolher wallpapers. Esta integra
 
 A sincronização de cores, do fundo de bloqueio e a extensão de login GDM são específicas do GNOME. Não há integração equivalente de login para SDDM ou LightDM.
 
-Os testes automatizados verificam caminhos e comandos dos adaptadores; não comprovam o resultado visual em KDE ou XFCE. **Não há garantia de funcionamento em qualquer distribuição Linux.** Outras GPUs, drivers e arquiteturas precisam de validação.
+**Não há garantia de funcionamento em qualquer distribuição Linux.** Outras GPUs, drivers e arquiteturas precisam de validação; o alcance dos testes está descrito em [Testes](#testes).
 
-## Requisitos
+## Funcionalidades
 
-- **Steam e Wallpaper Engine** instalados, com os wallpapers da Workshop baixados.
-- **Python 3 com Pillow** e **Node.js**.
-- **GNOME:** PyGObject, `gnome-shell`, `gnome-extensions`, `gsettings` e `glib-compile-schemas`.
-- **KDE:** `qdbus6`, `qdbus` ou `gdbus`. Para animação experimental: Plasma 6, `kpackagetool6`, `xwayland-run`, QtWayland.Compositor e plasma5support QML.
-- **XFCE:** `xfconf-query` e xfdesktop em execução.
-- **Renderização:** Podman com o runtime e a imagem de dependências, ou um renderizador nativo compatível. O pacote `.run` já inclui o runtime e a imagem, mas exige Podman instalado.
-
-O comando de instalação completa e a opção `--install-deps` instalam os requisitos ausentes pelos gerenciadores suportados. Sem essa opção, o instalador apenas informa as dependências ausentes. A opção `--check` verifica o ambiente sem instalar pacotes nem migrar arquivos.
-
-## Instalação
-
-O instalador do usuário é **`wallpaper-linux/install.py`**. O executável `.run` prepara o runtime e chama esse mesmo instalador, utilizando as mesmas opções e validações. Você não precisa executar vários instaladores.
-
-Internamente, a sincronização foi separada em conexão da interface oficial, cópia dos scripts e instalação do serviço. O runtime é copiado para uma pasta temporária antes da troca, preservando a versão anterior e os arquivos que um renderizador em execução ainda utiliza. Se a troca falhar, o instalador tenta restaurar a versão anterior.
-
-O GDM continua como auxiliar interno separado por exigir privilégios de administrador, mas é acionado pela opção `--login-background` do instalador principal. O antigo `wallpaper-linux/login-screen/install.py` foi substituído por `wallpaper-linux/installation/gdm.py`; não execute esse auxiliar diretamente.
-
-### Instalação por download do GitHub
-
-O comando abaixo baixa o instalador da versão **v0.2.1**, instala os requisitos ausentes, confere o SHA-256 e coloca a integração na pasta oculta `~/.local/share/wallpaper-engine`:
-
-```bash
-arquivo_we=$(mktemp) && curl -fL https://raw.githubusercontent.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/v0.2.1/install.sh -o "$arquivo_we" && bash "$arquivo_we"; resultado_we=$?; [ -z "${arquivo_we:-}" ] || rm -f "$arquivo_we"; (exit "$resultado_we")
-```
-
-É um comando completo para copiar e colar no terminal. Requer Bash e `curl` para iniciar o download, além de `sudo` configurado quando forem necessárias alterações de administrador. Execute com seu usuário normal, **sem `sudo` no comando inteiro**. Se faltarem pacotes do sistema, a instalação solicita a autenticação de administrador uma vez e reutiliza essa autorização apenas enquanto o instalador estiver em execução. A pergunta de início automático continua no final.
-
-Steam, a compra/instalação do Wallpaper Engine e os downloads da Workshop precisam estar disponíveis na sua conta. O comando não compra o aplicativo nem entra na Steam por você. A animação foi validada no GNOME; as limitações de KDE e XFCE continuam sendo as da tabela de compatibilidade.
-
-A instalação de pacotes ausentes está implementada para **Debian/Ubuntu (`apt-get`), Fedora (`dnf`), Arch (`pacman`) e sistemas `rpm-ostree`, como Bazzite**. Esses caminhos têm testes de montagem dos comandos; a instalação real em todas essas distribuições não foi validada. No Bazzite, se faltar algum pacote do hospedeiro, o `rpm-ostree` prepara a alteração para a próxima inicialização: reinicie e execute o mesmo comando para concluir. O instalador não reinicia o computador automaticamente. Veja a [documentação do Bazzite](https://docs.bazzite.gg/Installing_and_Managing_Software/rpm-ostree/).
-
-Os downloads grandes são temporários e são removidos ao encerrar. A integração fica independente da pasta onde você baixou ou clonou o projeto. Para baixar manualmente o `.run`, acesse [Releases](https://github.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/releases).
-
-
-### Executável pronto: um único comando
-
-Na pasta do projeto:
-
-```bash
-chmod +x dist/WallpaperEngine-Linux-x86_64.run && ./dist/WallpaperEngine-Linux-x86_64.run --install-deps
-```
-
-Se você baixou apenas o arquivo `.run`, execute na pasta em que ele está:
-
-```bash
-chmod +x WallpaperEngine-Linux-x86_64.run && ./WallpaperEngine-Linux-x86_64.run --install-deps
-```
-
-Execute com seu usuário normal, **sem `sudo`**. Quando disponível, também é possível escolher **Executar como programa** no gerenciador de arquivos; o instalador tenta abrir um terminal.
-
-O pacote é destinado a **Linux x86_64**. Não é um AppImage independente das ferramentas do hospedeiro. Inclui componentes de vários GB e extrai os arquivos em `~/.cache/wallpaper-engine/installers`, com limpeza temporária ao encerrar normalmente.
-
-Para verificar a integridade ou os requisitos sem instalar, usando o arquivo dentro do projeto:
-
-```bash
-./dist/WallpaperEngine-Linux-x86_64.run --verify
-./dist/WallpaperEngine-Linux-x86_64.run --check
-```
-
-### Instalação pelos scripts
-
-Na pasta do projeto:
-
-```bash
-python3 wallpaper-linux/install.py --check
-python3 wallpaper-linux/install.py --install-deps
-```
-
-Esse caminho exige um renderizador já preparado ou uma das opções de compilação/renderizador nativo explicadas em [Opções avançadas](#opções-avançadas).
-
-### Progresso colorido
-
-| Porcentagem | Cor |
-|---|---|
-| 0–49% | Vermelho |
-| 50–79% | Laranja |
-| 80–100% | Verde |
-
-As porcentagens acompanham etapas concluídas, não o tempo restante. Compilações e cópias grandes podem permanecer na mesma porcentagem enquanto trabalham. Ao finalizar com sucesso, aparece **“Concluído!”**.
-
-As cores são ativadas automaticamente no terminal. As opções `--color always` e `--color never` forçam ou desativam as cores:
-
-```bash
-python3 wallpaper-linux/install.py --color always
-python3 wallpaper-linux/install.py --color never
-```
-
-### Escolher o início automático
-
-Ao final da instalação, o terminal pergunta:
-
-```text
-Deseja que o Wallpaper Engine inicie junto com o sistema? [s/n]:
-```
-
-- **s:** ativa o início automático ao entrar na sessão gráfica.
-- **n:** desativa o início automático; você pode abrir **Wallpaper Engine Linux** pelo menu quando desejar.
-
-A escolha controla o serviço, o autostart XDG e o comportamento da extensão GNOME. Para alterar a preferência, execute o instalador novamente. Em instalações sem interação, informe a escolha explicitamente:
-
-```bash
-python3 wallpaper-linux/install.py --startup yes
-python3 wallpaper-linux/install.py --startup no
-```
-
-As opções `--install-deps`, `--startup`, `--color`, `--desktop`, `--steam-root`, `--kde-plugin` e `--login-background` também estão disponíveis no `.run`.
-
-## Como usar
-
-1. Abra o Wallpaper Engine pela Steam.
-2. Assine os wallpapers desejados na Workshop e aguarde o download.
-3. Selecione uma **cena ou vídeo** na biblioteca, sem precisar pressionar **OK** para aplicar a seleção no Linux.
-4. No GNOME, abra **Wallpaper Engine Linux** no menu para ajustar FPS, áudio, monitor ou enquadramento.
-
-Também é possível abrir as preferências com:
-
-```bash
-gnome-extensions prefs wallpaperengine@waylandwe
-```
-
-Com o início automático ativado, não é necessário abrir o aplicativo oficial em cada inicialização. A integração utiliza a última configuração ou seleção registrada. O autostart XDG permite iniciar a integração em sessões sem systemd de usuário.
-
-A instalação preserva o wallpaper, o FPS e o volume já configurados. O lançador GNOME consulta a resolução física do monitor, considerando a escala da sessão e a orientação. Não há um limite fixo de 1920×1080: o tamanho da saída acompanha o monitor, enquanto as texturas da cena mantêm sua resolução original. Um arquivo 4K em um monitor Full HD é reduzido para a resolução da tela.
-
-### Qualidade de cenas e vídeos
-
-- **Cenas:** o ajuste de FPS controla o motor. O parser aceita o espaçamento de texto em dois eixos usado por cenas como Obsessed Carolyn e 麻匪 Elisa; anteriormente esse formato encerrava o renderizador.
-- **Vídeos:** preservam sua taxa de quadros original, sem o filtro que forçava todos a 60 FPS. A janela acompanha o monitor escolhido e não se redimensiona ao mudar a resolução do vídeo.
-- **Rotação:** o lançador inspeciona os metadados com `ffprobe` e desativa a rotação automática quando encontra uma matriz com cisalhamento inválido, como no arquivo Re:zero Subaru testado. Rotações válidas são preservadas.
-
-O runtime em contêiner inclui o decodificador completo de H.264/HEVC (`libavcodec-freeworld`) e drivers VA-API Intel, obtidos do RPM Fusion. Isso evita depender exclusivamente do OpenH264 para vídeos com perfis que ele não decodifica corretamente. Esses pacotes ficam no contêiner; não substituem os pacotes do sistema hospedeiro. A escolha está alinhada à [documentação de aceleração de vídeo do Fedora](https://fedoraproject.org/wiki/Hardware_Video_Acceleration). No modo nativo, disponibilize `mpv`, `ffprobe` e os codecs adequados na sua distribuição.
-
-**Limitações verificadas nas cenas citadas:** Obsessed Carolyn e 麻匪 Elisa deixam de encerrar por causa do formato de espaçamento do texto. Há adaptações adicionais para shaders que alteram coordenadas interpoladas e para o comando `commands/copy`. Isso não equivale a reproduzir integralmente essas cenas: nas capturas de teste ainda aparecem diferenças de contraste no Carolyn e partes deformadas/ausentes no Elisa. Esses problemas restantes são de compatibilidade do motor com efeitos e modelos, não um limite de resolução 1080p.
-
-Resolução e FPS maiores aumentam o consumo de GPU e memória. A nitidez também depende do conteúdo original. Uma cena pode utilizar recursos do Wallpaper Engine ainda não implementados no motor Linux; corrigir o tamanho da saída não garante compatibilidade com todos os efeitos, luzes, scripts ou formatos de textura. O log da última execução fica em `~/.local/share/wallpaper-engine/state/renderer.log`.
+- Seleção imediata de cenas e vídeos pela interface oficial.
+- Animação no desktop e na visão geral do GNOME.
+- Cor de destaque e fundos estáticos sincronizados no GNOME.
+- Início automático opcional ao entrar na sessão.
+- Ajustes de FPS, áudio, monitor e enquadramento no GNOME.
+- Detecção de bibliotecas Steam tradicionais e Flatpak.
+- Prévia estática opcional na tela de login GDM.
 
 ## Tela de login — GDM
 
-A tela de login é a tela exibida **antes de entrar na sua conta**. A integração opcional do GDM utiliza uma **imagem estática da prévia do wallpaper selecionado**, enquanto a animação continua sendo aplicada na área de trabalho após o login.
+No GNOME com GDM, é possível usar a **prévia estática** do wallpaper selecionado na tela de login. Essa opção exige autenticação de administrador e altera uma configuração compartilhada pelo computador.
 
-| Função | Comportamento |
-|---|---|
-| Aplicar a seleção atual | Usa a prévia da última seleção registrada; se não houver registro, consulta a configuração da extensão GNOME. |
-| Acompanhar novas seleções | O sincronizador atualiza a imagem compartilhada quando você seleciona outro wallpaper compatível. |
-| Atualizar o fundo do GDM | A extensão acompanha alterações na pasta da imagem e recria os fundos dos monitores. |
-| Adaptar aos monitores | Cria um fundo por monitor, preenchendo a área com recorte proporcional da imagem. |
-| Preservar a configuração anterior | O instalador mantém um backup da extensão e da configuração GDM anteriores em `/var/lib/firewatch-login-backup`. |
-| Separar imagem e código | A extensão permanece protegida pelo administrador; somente a pasta da imagem fica gravável pelo usuário configurado. |
-| Evitar interromper a sessão | O instalador não reinicia o GDM nem encerra sua sessão. |
-
-Para configurar:
+Ao executar o arquivo baixado, acrescente:
 
 ```bash
-python3 wallpaper-linux/install.py --login-background
+bash WallpaperEngine-Linux-x86_64.run --install-deps --login-background
 ```
 
-Será solicitada autenticação de administrador para instalar a extensão e configurar o GDM. Depois da preparação inicial, as próximas trocas da imagem não exigem nova senha. Se a extensão de login deste projeto já estiver instalada, o instalador principal atualiza essa configuração automaticamente.
-
-A imagem compartilhada fica em `/var/lib/wallpaper-engine-login/background.png`. A configuração do GDM é compartilhada pelo computador e acompanha o usuário que a preparou; não há seleção independente por conta nesta implementação.
-
-**Para carregar a extensão instalada ou atualizada, salve seu trabalho e reinicie o computador.** A imagem já configurada acompanha seleções posteriores pelo sincronizador. Esta função foi preparada para GNOME com GDM; não altera o logotipo Acer do firmware, o menu de boot ou a animação de inicialização do sistema.
+Depois da instalação, salve seu trabalho e reinicie o computador para carregar a extensão do GDM. As próximas seleções atualizam a imagem sem nova senha. A função não modifica o logotipo do fabricante nem a animação de boot.
 
 ## Opções avançadas
 
-### Compilar o renderizador
-
-O renderizador é mantido como submódulo do projeto original. Para baixar os fontes com as dependências:
+Para trabalhar com os fontes:
 
 ```bash
 git clone --recurse-submodules https://github.com/Ninjaagoo/Wallpaper-engine-Linux-plugin.git
 cd Wallpaper-engine-Linux-plugin
+python3 wallpaper-linux/install.py --check
+python3 wallpaper-linux/install.py --install-deps --build-runtime
 ```
 
-Se já clonou sem os submódulos, inicialize as dependências:
+A compilação exige Git, Podman, internet e vários GB livres. Pode levar vários minutos. As adaptações do motor são aplicadas a partir de `patches/*.patch`.
 
-```bash
-git submodule update --init --recursive
-```
-
-As alterações locais estão em `patches/linux-wallpaperengine-background.patch`. O instalador aplica o patch antes da compilação e reconhece quando ele já foi aplicado.
-
-Com Podman e Git disponíveis:
-
-```bash
-python3 wallpaper-linux/install.py --build-runtime
-```
-
-A opção baixa dependências e CEF e compila o código local usando o `Containerfile`. Pode exigir vários GB de espaço e levar vários minutos. A imagem utiliza Fedora para isolar bibliotecas do hospedeiro. Uma reconstrução completa não foi repetida durante a reorganização desta documentação.
-
-### Usar um renderizador nativo
-
-```bash
-python3 wallpaper-linux/install.py --renderer /usr/local/bin/linux-wallpaperengine
-```
-
-Nesse modo, as bibliotecas nativas e o mpv precisam estar disponíveis no hospedeiro. Os controles adicionais de foco dependem das adaptações incluídas neste projeto; um binário externo pode não conter essas alterações.
-
-### Informar o ambiente e o caminho da Steam
-
-```bash
-python3 wallpaper-linux/install.py --desktop gnome
-python3 wallpaper-linux/install.py --desktop kde --steam-root "/caminho/Steam"
-python3 wallpaper-linux/install.py --desktop xfce
-```
-
-O caminho informado em `--steam-root` deve conter a pasta `steamapps`.
-
-### Ativar o addon experimental do KDE Plasma 6
-
-```bash
-python3 wallpaper-linux/install.py --desktop kde --kde-plugin
-```
-
-As dependências QML e `xwayland-run` devem estar instaladas antes. Sem o addon disponível, o KDE utiliza a prévia estática. Para esse backend, `~/.local/share/wallpaper-engine/config/config.json` aceita `fps` e `render_size`, por exemplo:
-
-```json
-{
-  "fps": 60,
-  "render_size": [1920, 1080]
-}
-```
-
-Esses campos complementam a configuração existente; preserve as outras chaves do arquivo.
-
-### Gerar o executável
-
-Com o runtime e a imagem Podman preparados neste computador:
-
-```bash
-python3 tools/build-release.py
-```
-
-O gerador cria o `.run` e o arquivo `.run.sha256` em `dist/`. O SHA-256 permite conferir se o pacote corresponde ao arquivo distribuído.
-
-## Como a integração funciona
-
-```text
-Wallpaper Engine na Steam
-          │ seleção de uma cena ou vídeo
-          ▼
-Serviço local de sincronização
-          ├── GNOME: extensão animada, destaque e fundos estáticos
-          ├── GDM configurado: prévia estática da tela de login
-          ├── KDE: addon experimental ou prévia estática
-          └── XFCE: prévia estática
-```
-
-A interface envia a seleção para `127.0.0.1:49367`, com um token de autenticação. O serviço valida o caminho da Workshop e aplica a seleção no adaptador do desktop.
-
-No GNOME, a extensão posiciona cópias da imagem renderizada nos fundos do desktop e da visão geral. No modo em contêiner, o renderizador utiliza XWayland, sem rede, com as bibliotecas Steam montadas somente para leitura. Também existe o modo de execução nativa.
-
-Os componentes instalados ficam fora da pasta do projeto. Mover os fontes em `Documentos` não interrompe a integração instalada.
-
-## Organização dos arquivos
-
-| Caminho | Responsabilidade |
+| Opção | Uso |
 |---|---|
-| `install.sh` | Comando de instalação completa: download, requisitos, integridade e limpeza temporária |
-| `wallpaper-linux/paths.py` | Pasta central e migração dos caminhos antigos |
-| `wallpaper-linux/installation/dependencies.py` | Planejamento e instalação dos pacotes ausentes com autenticação única |
-| `wallpaper-linux/install.py` | Única entrada de instalação para o usuário; coordena as etapas e a escolha do início automático |
-| `wallpaper-linux/installation/options.py` | Opções compartilhadas pelo instalador normal e offline |
-| `wallpaper-linux/installation/requirements.py` | Validação de dependências e versões GNOME |
-| `wallpaper-linux/installation/runtime.py` | Compilação, importação e troca segura do renderizador |
-| `wallpaper-linux/installation/offline.py` | Prepara o pacote extraído e chama o instalador principal |
-| `wallpaper-linux/installation/gdm.py` | Auxiliar interno de administrador para imagem, backup e extensão GDM |
-| `wallpaper-linux/install_progress.py` | Progresso e cores do instalador |
-| `wallpaper-linux/desktop_support.py` | Detecção do desktop, caminhos Steam e adaptadores KDE/XFCE |
-| `wallpaper-linux/selection-sync.py` | Seleção imediata, cores e atualização das imagens de fundo |
-| `wallpaper-linux/session-start.py` | Inicialização da integração e abertura pelo menu |
-| `wallpaper-linux/wallpaper-renderer` | Lançador do renderizador nativo ou em contêiner |
-| `wallpaper-linux/extension/` | Extensão GNOME e preferências adaptadas |
-| `wallpaper-linux/login-screen/` | Arquivos e imagem de referência da extensão GDM; sem instalador separado |
-| `wallpaper-linux/tests/` | Testes automatizados |
-| `wallpaper-linux/vendor/` | Addon KDE de terceiros, com licença original |
-| `linux-wallpaperengine/` | Submódulo do renderizador C++ e suas dependências |
-| `patches/` | Alterações locais reproduzíveis sobre o renderizador original |
-| `tools/build-release.py` | Exporta dependências, compacta arquivos, gera o executável e calcula o SHA-256 |
-| `tools/package-bootstrap.py` | Pequena entrada interna do `.run`, que delega ao módulo offline |
-| `dist/` | Executável e soma SHA-256 |
-| `.vscode/` | Configuração do editor e IntelliSense |
+| `--startup yes` / `--startup no` | Define o início automático sem pergunta interativa. |
+| `--desktop gnome`, `kde` ou `xfce` | Informa o ambiente manualmente. |
+| `--steam-root /caminho/Steam` | Informa a pasta que contém `steamapps`. |
+| `--kde-plugin` | Instala o addon experimental do Plasma 6. |
+| `--login-background` | Configura a prévia estática no GDM. |
+| `--renderer /caminho/linux-wallpaperengine` | Usa um renderizador nativo, com bibliotecas e codecs instalados no hospedeiro. |
 
-### Pasta oculta e registros do sistema
-
-Os arquivos privados da integração ficam reunidos em **`~/.local/share/wallpaper-engine/`**:
-
-```text
-~/.local/share/wallpaper-engine/
-├── bin/          # Lançadores
-├── config/       # Configuração e escolha de início automático
-├── state/        # Última seleção, token, backup da interface e logs
-├── backgrounds/  # Prévias estáticas dos wallpapers
-├── integration/  # Sincronizador e módulos utilizados na sessão
-├── runtime/      # Renderizador e bibliotecas
-└── package/      # Fontes e arquivos instalados pelo pacote offline
-```
-
-Por estar dentro de `.local`, a pasta fica oculta por padrão no gerenciador de arquivos. Use **Ctrl+H** para exibi-la. Não é instalada dentro da pasta do aplicativo Steam, para manter a integração independente das atualizações e reinstalações dele.
-
-Na atualização, os dados anteriores de `~/.config/wallpaper-engine`, `~/.local/state/wallpaper-engine` e `~/.local/share/backgrounds/wallpaper-engine` são migrados. Esses caminhos passam a ser links para a pasta central, preservando a compatibilidade da sessão atual. Conflitos de arquivos são preservados em pastas `migration-backup-*` dentro do mesmo local principal.
-
-Existem exceções exigidas pela integração com o Linux: o serviço em `~/.config/systemd/user`, o autostart em `~/.config/autostart`, o atalho do menu em `~/.local/share/applications`, os links em `~/.local/bin` e a extensão em `~/.local/share/gnome-shell/extensions`. A imagem e a extensão do GDM ficam em locais do sistema porque precisam funcionar antes do login. O Podman mantém a imagem de dependências no armazenamento próprio de contêineres.
-
-### Arquivos instalados no usuário
-
-| Caminho | Conteúdo |
-|---|---|
-| `~/.local/share/wallpaper-engine/` | Renderizador e integração instalados; mantenha esta pasta |
-| `~/.local/share/wallpaper-engine/config/config.json` | Preferências da integração e início automático |
-| `~/.local/share/wallpaper-engine/state/last-selection.json` | Última seleção aplicada |
-| `~/.local/share/wallpaper-engine/state/wallpaper-ui-original.js` | Backup da interface oficial |
-| `~/.config/autostart/wallpaper-engine-linux.desktop` | Entrada de início automático, quando ativada |
-| `~/.config/systemd/user/wallpaper-selection-sync.service` | Serviço de sincronização |
-| `~/.local/bin/wallpaper-engine-start` | Comando para iniciar a integração |
-
-Somente os nomes das variáveis do código próprio foram padronizados em português, sem acentos nos identificadores. Contadores usam `i` e `j`; sintaxe, APIs, funções, métodos, opções de terminal e chaves de configuração podem permanecer em inglês. O código dos componentes externos conserva seus nomes originais.
+As opções `--build-runtime` e `--renderer` são específicas do instalador pelos fontes. As demais também são aceitas pelo `.run`. Consulte `--help` para todas as opções.
 
 ## Diagnóstico e atualização
 
-Verificar o serviço e a extensão GNOME:
+Os arquivos principais ficam em `~/.local/share/wallpaper-engine/`. Use **Ctrl+H** no gerenciador de arquivos para exibir pastas ocultas. A extensão, o serviço e os atalhos usam os locais próprios do desktop; o Podman mantém as imagens no seu armazenamento.
+
+Para consultar o serviço e os logs em sessões com systemd:
 
 ```bash
 systemctl --user status wallpaper-selection-sync.service
-gnome-extensions info wallpaperengine@waylandwe
-```
-
-Consultar os logs e reiniciar a sincronização:
-
-```bash
 journalctl --user -u wallpaper-selection-sync.service -n 50 --no-pager
 tail -n 50 ~/.local/share/wallpaper-engine/state/renderer.log
-systemctl --user restart wallpaper-selection-sync.service
 ```
 
-Em sessões sem systemd de usuário, consulte `~/.local/share/wallpaper-engine/state/selection-sync.log`. Para iniciar manualmente:
+Sem systemd de usuário, consulte `~/.local/share/wallpaper-engine/state/selection-sync.log`.
 
-```bash
-~/.local/bin/wallpaper-engine-start
-```
-
-| Situação | O que fazer |
+| Problema | O que fazer |
 |---|---|
-| Seleção não chega ao Linux | Feche e reabra o Wallpaper Engine. |
-| Atualização oficial removeu a integração da interface | Execute novamente o instalador. |
-| Extensão GNOME foi instalada ou atualizada | Salve seu trabalho, saia e entre na sessão para carregar o código novo. |
-| GDM ainda mostra a imagem antiga | Confirme a configuração com `--login-background` e reinicie o computador para carregar a extensão atualizada. |
-| KDE ou XFCE mostra uma imagem sem animação | Confira o estado de suporte na tabela de compatibilidade. |
-| Erros de inclusão no VS Code | Confira `.vscode/c_cpp_properties.json` e execute **C/C++: Reset IntelliSense Database**. |
+| A seleção não chega ao Linux | Feche e reabra o Wallpaper Engine. |
+| Uma atualização oficial removeu a integração | Execute novamente o instalador. |
+| A extensão GNOME foi atualizada | Saia e entre na sessão para carregar o código novo. |
+| Consumo ou aquecimento elevado | Reduza o FPS nas preferências e verifique o consumo dos outros aplicativos. |
+| Partes ausentes, cores ou efeitos incorretos | Pode ser uma limitação do motor experimental; informe o wallpaper, o desktop, a GPU e o log. |
+| KDE ou XFCE sem animação | Confira a tabela de compatibilidade. |
 
-Os cabeçalhos usados pelo IntelliSense ficam em `~/.cache/wallpaper-engine/intellisense`, separados do runtime. A pasta de compilação C++ removida durante a limpeza precisa ser gerada novamente para uma recompilação nativa.
+Para iniciar manualmente, execute `~/.local/bin/wallpaper-engine-start`. Para reiniciar a sincronização em sessões com systemd, use `systemctl --user restart wallpaper-selection-sync.service`.
+
+## Tecnologias e linguagens
+
+🐍 **Python 3** · 🟨 **JavaScript/GJS** · ⚙️ **C++20** · 🐚 **Bash** · 🟩 **QML** · 🏷️ **XML** · 📋 **JSON**
+
+A integração utiliza 🐧 Linux, 📦 Podman, GSettings, D-Bus e systemd de usuário.
 
 ## Testes
 
-Na pasta do projeto:
+As mudanças são testadas localmente antes de preparar uma versão. Os testes automatizados verificam a integração e partes do renderizador; não substituem a validação visual dos wallpapers e desktops.
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s wallpaper-linux/tests -v
+node tools/test-renderer-lifecycle.mjs
 ```
 
-A suíte também verifica a migração dos dados e links, conflitos sem perda de arquivos, seleção de pacotes por distribuição, reutilização da autenticação e download/limpeza do instalador sem acessar a rede real nos testes. A suíte de instalação verifica opções compartilhadas, dependências e versões incompatíveis, encaminhamento das opções e do ambiente ao instalador principal, `--check` sem instalação, chamadas GSettings, restrição do auxiliar GDM e substituição do runtime sem invalidar arquivos em uso. Os testes não alteram a sessão real nem substituem a validação visual dos desktops.
+O teste C++ em `tools/test-native-rendering.cpp` verifica parsing, shaders e composição; a opção `--opengl` exige um display OpenGL. Os executáveis distribuídos só recebem as mudanças quando uma nova versão é preparada e publicada.
 
 ## Desenvolvimento e créditos
 
-**Desenvolvedor da integração e das adaptações locais: ninjaagoo.**
+<table>
+  <tr>
+    <td><a href="https://github.com/Ninjaagoo"><img src="docs/media/ninjaagoo.png" width="80" height="80" alt="Foto de perfil de Ninjaagoo no GitHub"></a></td>
+    <td><strong><a href="https://github.com/Ninjaagoo">Ninjaagoo</a></strong><br>Desenvolvedor da integração e das adaptações locais.</td>
+  </tr>
+</table>
 
 O projeto reúne código existente, modificações locais e scripts de integração. Agradecimentos aos autores e colaboradores que disponibilizaram as bases utilizadas:
 
@@ -430,8 +210,6 @@ O projeto reúne código existente, modificações locais e scripts de integraç
 | [linux-wallpaperengine — Almamu e colaboradores](https://github.com/Almamu/linux-wallpaperengine) | Renderizador de wallpapers no Linux; fonte em `linux-wallpaperengine/`. |
 | [Wallpaper Engine for Wayland — diaslucass e colaboradores](https://github.com/diaslucass/wallpaperEngineWayland) | Base da extensão GNOME, adaptada em `wallpaper-linux/extension/`. |
 | [Application Wallpaper for Plasma 6 — Sebastian Krzyszkowiak e colaboradores](https://invent.kde.org/dos/plasma-wallpaper-application) | Addon da integração experimental com KDE, preservado em `wallpaper-linux/vendor/plasma-application/`. |
-
-As adaptações locais incluem sincronização imediata da seleção, cores do GNOME, fundos estáticos e GDM, integração com a visão geral, ajustes de foco e minimização, resolução física, execução isolada, início automático opcional, instalador unificado e empacotamento executável.
 
 Os créditos reconhecem o código utilizado; não indicam participação direta, parceria ou endosso dos autores originais a esta adaptação. As alterações locais não foram incorporadas aos repositórios originais.
 

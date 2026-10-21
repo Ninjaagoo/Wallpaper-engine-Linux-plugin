@@ -24,7 +24,7 @@ const CLASSES_JANELA_RENDERIZADOR = [
 
 // Bumped on every code change; logged from enable() so we can tell which
 // revision the running shell actually loaded (see the comment there).
-const REVISAO_CODIGO = 12;
+const REVISAO_CODIGO = 13;
 
 const SIGTERM = 15;
 const SIGCONT = 12; // launcher: unpause container
@@ -53,6 +53,7 @@ export default class WallpaperEngineExtension extends Extension {
         this._processo = null;
         this._clienteWayland = null;
         this._processoParando = false;
+        this._reinicioPendente = false;
         this._inicioProcesso = 0;
         this._pausado = false;
         this._retentativas = 0;
@@ -108,6 +109,7 @@ export default class WallpaperEngineExtension extends Extension {
 
     disable() {
         this._destruido = true;
+        this._reinicioPendente = false;
 
         if (this._gerenciadorInjecao) {
             this._gerenciadorInjecao.clear();
@@ -460,6 +462,10 @@ export default class WallpaperEngineExtension extends Extension {
             return;
 
         const estavaParando = this._processoParando;
+        if (this._idTempoLimiteEncerramento) {
+            GLib.source_remove(this._idTempoLimiteEncerramento);
+            this._idTempoLimiteEncerramento = 0;
+        }
         const tempoAtivo = GLib.get_monotonic_time() - this._inicioProcesso;
         this._processo = null;
         this._clienteWayland = null;
@@ -467,8 +473,13 @@ export default class WallpaperEngineExtension extends Extension {
         this._pausado = false;
         this._forgetWindow();
 
-        if (estavaParando)
+        if (estavaParando) {
+            const reiniciar = this._reinicioPendente;
+            this._reinicioPendente = false;
+            if (reiniciar && this._configuracoes?.get_boolean('enabled'))
+                this._startEngine();
             return;
+        }
 
         if (tempoAtivo > TEMPO_ESTAVEL_US)
             this._retentativas = 0;
@@ -502,6 +513,8 @@ export default class WallpaperEngineExtension extends Extension {
 
         const processo = this._processo;
         if (processo === null)
+            return;
+        if (this._processoParando)
             return;
 
         this._processoParando = true;
@@ -546,9 +559,13 @@ export default class WallpaperEngineExtension extends Extension {
             GLib.PRIORITY_DEFAULT, INTERVALO_REINICIO_MS, () => {
                 this._idTemporizadorReinicio = 0;
                 this._retentativas = 0;
-                this._stopEngine();
-                if (this._configuracoes?.get_boolean('enabled'))
+                this._reinicioPendente = this._configuracoes?.get_boolean('enabled') ?? false;
+                if (this._processo !== null) {
+                    this._stopEngine();
+                } else if (this._reinicioPendente) {
+                    this._reinicioPendente = false;
                     this._startEngine();
+                }
                 return GLib.SOURCE_REMOVE;
             });
     }
