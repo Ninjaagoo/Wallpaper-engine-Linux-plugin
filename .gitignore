@@ -1,0 +1,10 @@
+# Binários são distribuídos em Releases, fora do histórico Git.
+/dist/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+/build/
+*.run.new
+# Configurações locais do editor contêm caminhos deste computador.
+/.vscode/

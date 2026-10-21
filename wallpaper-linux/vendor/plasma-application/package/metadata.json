@@ -1,0 +1,24 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Id": "net.dosowisko.PlasmaApplicationWallpaper",
+        "Name": "Application",
+        "Description": "Set an arbitrary application as the background",
+        "Icon": "preferences-desktop-wallpaper",
+        "Website": "https://invent.kde.org/dos/plasma-wallpaper-application",
+        "License": "GPL-3.0-or-later",
+        "Authors": [
+            {
+                "Name": "Sebastian Krzyszkowiak",
+                "Email": "dos@dosowisko.net"
+            }
+        ],
+        "Category": "Wallpaper",
+        "Version": "1.2",
+        "ServiceTypes": [
+            "Plasma/Wallpaper"
+        ]
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-KDE-ParentApp": "org.kde.plasmashell"
+}

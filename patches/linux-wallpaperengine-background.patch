@@ -1,0 +1,76 @@
+diff --git a/src/WallpaperEngine/Render/Drivers/GLFWOpenGLDriver.cpp b/src/WallpaperEngine/Render/Drivers/GLFWOpenGLDriver.cpp
+index 01063d9..31d61ae 100644
+--- a/src/WallpaperEngine/Render/Drivers/GLFWOpenGLDriver.cpp
++++ b/src/WallpaperEngine/Render/Drivers/GLFWOpenGLDriver.cpp
+@@ -12,6 +12,12 @@
+ #include <GLFW/glfw3native.h>
+ 
+ #include <unistd.h>
++#include <cstdlib>
++#include <vector>
++#ifdef ENABLE_X11
++#include <X11/Xutil.h>
++#include <X11/Xatom.h>
++#endif
+ 
+ using namespace WallpaperEngine::Render::Drivers;
+ 
+@@ -32,6 +38,12 @@ GLFWOpenGLDriver::GLFWOpenGLDriver (const char* windowTitle, ApplicationContext&
+     glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 3);
+     glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+     glfwWindowHint (GLFW_VISIBLE, GLFW_FALSE);
++    const bool backgroundWindow = std::getenv ("WALLPAPERENGINE_BACKGROUND") != nullptr;
++    if (backgroundWindow) {
++        glfwWindowHint (GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
++        glfwWindowHint (GLFW_FOCUSED, GLFW_FALSE);
++        glfwWindowHint (GLFW_MOUSE_PASSTHROUGH, GLFW_TRUE);
++    }
+     // set X11-specific hints
+     glfwWindowHintString (GLFW_X11_CLASS_NAME, "linux-wallpaperengine");
+     glfwWindowHintString (GLFW_X11_INSTANCE_NAME, "linux-wallpaperengine");
+@@ -54,6 +66,45 @@ GLFWOpenGLDriver::GLFWOpenGLDriver (const char* windowTitle, ApplicationContext&
+ 	sLog.exception ("Cannot create window");
+     }
+ 
++#ifdef ENABLE_X11
++    if (backgroundWindow && glfwGetPlatform () == GLFW_PLATFORM_X11) {
++        Display* display = glfwGetX11Display ();
++        const Window window = glfwGetX11Window (this->m_window);
++        XWMHints* hints = XGetWMHints (display, window);
++        if (!hints)
++            hints = XAllocWMHints ();
++        if (hints) {
++            hints->flags |= InputHint;
++            hints->input = False;
++            XSetWMHints (display, window, hints);
++            XFree (hints);
++        }
++        // Both ICCCM focus mechanisms must be disabled. InputHint alone still
++        // allows the WM_TAKE_FOCUS protocol to focus an otherwise hidden window.
++        Atom* protocols = nullptr;
++        int count = 0;
++        if (XGetWMProtocols (display, window, &protocols, &count)) {
++            const Atom takeFocus = XInternAtom (display, "WM_TAKE_FOCUS", False);
++            std::vector<Atom> remaining;
++            for (int i = 0; i < count; ++i)
++                if (protocols[i] != takeFocus)
++                    remaining.push_back (protocols[i]);
++            XSetWMProtocols (display, window, remaining.data (), static_cast<int> (remaining.size ()));
++            XFree (protocols);
++        }
++        XFlush (display);
++        const Atom stateProperty = XInternAtom (display, "_NET_WM_STATE", False);
++        Atom states[] = {
++            XInternAtom (display, "_NET_WM_STATE_SKIP_TASKBAR", False),
++            XInternAtom (display, "_NET_WM_STATE_SKIP_PAGER", False),
++            XInternAtom (display, "_NET_WM_STATE_BELOW", False),
++        };
++        XChangeProperty (display, window, stateProperty, XA_ATOM, 32, PropModeReplace,
++                         reinterpret_cast<const unsigned char*> (states), 3);
++        XFlush (display);
++    }
++#endif
++
+     // make context current, required for glew initialization
+     glfwMakeContextCurrent (this->m_window);
+ 

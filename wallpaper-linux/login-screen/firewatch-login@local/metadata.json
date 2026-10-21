@@ -1,0 +1,8 @@
+{
+  "uuid": "firewatch-login@local",
+  "name": "Firewatch Login Background",
+  "description": "Imagem estática do Firewatch na tela de login.",
+  "shell-version": ["50"],
+  "session-modes": ["gdm"],
+  "version": 1
+}

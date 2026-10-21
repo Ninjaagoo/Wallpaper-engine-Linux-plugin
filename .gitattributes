@@ -1,0 +1,2 @@
+# Linhas de contexto de patches preservam a indentação do código original.
+patches/*.patch -whitespace

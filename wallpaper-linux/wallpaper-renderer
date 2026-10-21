@@ -1,0 +1,154 @@
+#!/usr/bin/python3
+"""Execução isolada do renderizador e limpeza do contêiner ao encerrar."""
+import os
+import select
+import shutil
+import signal
+import subprocess
+import sys
+import uuid
+from pathlib import Path
+
+DIRETORIO_USUARIO = Path.home().resolve()
+AMBIENTE_EXECUCAO = DIRETORIO_USUARIO / '.local/share/wallpaper-engine/runtime'
+ESTADO = DIRETORIO_USUARIO / '.local/state/wallpaper-engine'
+IMAGEM = 'localhost/wallpaper-engine-runtime:fedora44'
+SERVICO_MONITOR = 'org.gnome.Mutter.DisplayConfig'
+CAMINHO_MONITOR = '/org/gnome/Mutter/DisplayConfig'
+TEMPO_LIMITE_MONITOR_MS = 3000
+CHAVES_AMBIENTE = ('DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'XDG_RUNTIME_DIR', 'XDG_SESSION_TYPE')
+ARGUMENTO_MONITORAMENTO = '--watch-container'
+INTEGRACAO = DIRETORIO_USUARIO / '.local/share/wallpaper-engine/integration'
+TEMPO_LIMITE_PARADA_SEGUNDOS = '1'
+
+
+def container_action(acao, nome, *opcoes):
+    return subprocess.run(['podman', acao, *opcoes, nome],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def watch_container(pid_pai, nome):
+    try:
+        descritor_pai = os.pidfd_open(pid_pai)
+    except ProcessLookupError:
+        pass
+    else:
+        try:
+            select.select([descritor_pai], [], [])
+        finally:
+            os.close(descritor_pai)
+    container_action('rm', nome, '--force', '--ignore')
+
+
+def physical_geometry(argumentos):
+    argumentos = list(argumentos)
+    if '--window' not in argumentos:
+        return argumentos
+    try:
+        from gi.repository import Gio
+        intermediario = Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None,
+            SERVICO_MONITOR, CAMINHO_MONITOR, SERVICO_MONITOR, None)
+        estado = intermediario.call_sync('GetCurrentState', None, Gio.DBusCallFlags.NONE,
+                                TEMPO_LIMITE_MONITOR_MS, None).unpack()
+        i = argumentos.index('--window') + 1
+        x, y, largura, altura = map(int, argumentos[i].split('x'))
+        for logico in estado[2]:
+            for monitor in estado[1]:
+                if monitor[0] not in logico[5]:
+                    continue
+                for modo in monitor[1]:
+                    if (modo[6].get('is-current', False)
+                            and round(modo[1] / logico[2]) == largura
+                            and round(modo[2] / logico[2]) == altura):
+                        argumentos[i] = f'{x}x{y}x{modo[1]}x{modo[2]}'
+                        return argumentos
+    except Exception as erro:
+        print(f'Physical resolution unavailable; retaining original geometry: {erro}', file=sys.stderr)
+    return argumentos
+
+
+def normalize_path(argumento):
+    prefixo = str(Path.home())
+    return str(DIRETORIO_USUARIO) + argumento[len(prefixo):] if argumento.startswith(prefixo + '/') else argumento
+
+
+def build_command(nome, argumentos, usar_mpv):
+    uid = os.getuid()
+    ambiente_sessao = os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{uid}')
+    sys.path.insert(0, str(INTEGRACAO))
+    from desktop_support import steam_libraries, read_config
+    nativo = read_config().get('renderer') or shutil.which('linux-wallpaperengine')
+    mecanismo = 'mpv' if usar_mpv else str(AMBIENTE_EXECUCAO / 'linux-wallpaperengine')
+    if nativo:
+        ambiente = dict(os.environ, WALLPAPERENGINE_BACKGROUND='1')
+        if not usar_mpv:
+            ambiente.update(WAYLAND_DISPLAY='', XDG_SESSION_TYPE='x11')
+        return (['mpv'] if usar_mpv else [nativo]) + [normalize_path(argumento) for argumento in argumentos], ambiente
+    comando = ['podman', 'run', '--rm', '--name', nome, '--pull=never',
+               '--userns=keep-id', '--user', f'{uid}:{os.getgid()}',
+               '--group-add=keep-groups', '--security-opt=label=disable',
+               '--network=none', '--cap-drop=ALL', '--device=/dev/dri']
+    montagens = [(AMBIENTE_EXECUCAO, 'ro'), (ESTADO, 'rw'), (ambiente_sessao, 'ro'), ('/tmp/.X11-unix', 'ro')]
+    montagens += [(raiz / 'steamapps', 'ro') for raiz in steam_libraries()]
+    autorizacao = os.environ.get('XAUTHORITY')
+    if autorizacao and Path(autorizacao).is_file() and not Path(autorizacao).is_relative_to(ambiente_sessao):
+        montagens.append((autorizacao, 'ro'))
+    if not Path('/dev/dri').exists():
+        comando.remove('--device=/dev/dri')
+    for caminho, acesso in montagens:
+        comando += ['-v', f'{caminho}:{caminho}:{acesso}']
+    comando += ['--workdir', str(AMBIENTE_EXECUCAO)]
+    for chave in CHAVES_AMBIENTE:
+        if chave in os.environ:
+            comando += ['--env', f'{chave}={os.environ[chave]}']
+    if not usar_mpv:
+        comando += ['--env', 'WAYLAND_DISPLAY=', '--env', 'XDG_SESSION_TYPE=x11',
+                    '--env', 'WALLPAPERENGINE_BACKGROUND=1']
+    comando += ['--env', f'PULSE_SERVER=unix:{ambiente_sessao}/pulse/native',
+                '--env', f'LD_LIBRARY_PATH={AMBIENTE_EXECUCAO}', IMAGEM, mecanismo]
+    return comando + [normalize_path(argumento) for argumento in argumentos], None
+
+
+def run_renderer(argumentos):
+    ESTADO.mkdir(parents=True, exist_ok=True)
+    nome = 'wallpaper-renderer-' + uuid.uuid4().hex[:10]
+    usar_mpv = Path(sys.argv[0]).name == 'wallpaper-mpv'
+    comando, ambiente = build_command(nome, physical_geometry(argumentos), usar_mpv)
+
+    def stop(*_):
+        if ambiente is not None:
+            processo.send_signal(signal.SIGCONT)
+            processo.terminate()
+        else:
+            container_action('unpause', nome)
+            container_action('stop', nome, '--time', TEMPO_LIMITE_PARADA_SEGUNDOS)
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    signal.signal(signal.SIGUSR1, lambda *_: processo.send_signal(signal.SIGSTOP) if ambiente is not None else container_action('pause', nome))
+    signal.signal(signal.SIGUSR2, lambda *_: processo.send_signal(signal.SIGCONT) if ambiente is not None else container_action('unpause', nome))
+    with (ESTADO / 'renderer.log').open('w') as registro:
+        processo = subprocess.Popen(comando, stdout=registro, stderr=subprocess.STDOUT, env=ambiente)
+        # The watcher survives an abrupt GNOME launcher termination.
+        if ambiente is None:
+            subprocess.Popen([sys.executable, str(Path(__file__).resolve()), ARGUMENTO_MONITORAMENTO,
+                              str(os.getpid()), nome], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        try:
+            return processo.wait()
+        finally:
+            if ambiente is None:
+                container_action('rm', nome, '--force', '--ignore')
+
+
+def main():
+    if len(sys.argv) == 4 and sys.argv[1] == ARGUMENTO_MONITORAMENTO:
+        watch_container(int(sys.argv[2]), sys.argv[3])
+        return 0
+    return run_renderer(sys.argv[1:])
+
+
+if __name__ == '__main__':
+    sys.exit(main())
