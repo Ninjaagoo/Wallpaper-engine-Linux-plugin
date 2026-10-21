@@ -1,0 +1,88 @@
+diff --git a/src/WallpaperEngine/Assets/AssetLocator.cpp b/src/WallpaperEngine/Assets/AssetLocator.cpp
+index 8d092d2..6c18d11 100644
+--- a/src/WallpaperEngine/Assets/AssetLocator.cpp
++++ b/src/WallpaperEngine/Assets/AssetLocator.cpp
+@@ -38,6 +38,11 @@ std::string AssetLocator::shader (const std::filesystem::path& filename) const {
+ }
+ 
+ std::string AssetLocator::fragmentShader (const std::filesystem::path& filename) const {
++    // This is a built-in render command, not an asset on disk.
++    if (filename == "commands/copy") {
++	return "uniform sampler2D g_Texture0;\nvarying vec2 v_TexCoord;\n"
++	       "void main() { gl_FragColor = texSample2D(g_Texture0, v_TexCoord); }\n";
++    }
+     auto final = filename;
+ 
+     final.replace_extension ("frag");
+@@ -46,6 +51,12 @@ std::string AssetLocator::fragmentShader (const std::filesystem::path& filename)
+ }
+ 
+ std::string AssetLocator::vertexShader (const std::filesystem::path& filename) const {
++    if (filename == "commands/copy") {
++	return "uniform mat4 g_ModelViewProjectionMatrix;\nattribute vec3 a_Position;\n"
++	       "attribute vec2 a_TexCoord;\nvarying vec2 v_TexCoord;\n"
++	       "void main() { gl_Position = mul(vec4(a_Position, 1.0), g_ModelViewProjectionMatrix);"
++	       " v_TexCoord = a_TexCoord; }\n";
++    }
+     auto final = filename;
+ 
+     final.replace_extension ("vert");
+@@ -93,4 +104,4 @@ std::filesystem::path AssetLocator::physicalPath (const std::filesystem::path& p
+     } catch (std::filesystem::filesystem_error& base) {
+ 	throw AssetLoadException (base);
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp b/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
+index fcc03fc..58981d4 100644
+--- a/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
++++ b/src/WallpaperEngine/Render/Shaders/ShaderUnit.cpp
+@@ -1,4 +1,5 @@
+ #include "ShaderUnit.h"
++#include "Compatibility.h"
+ 
+ #include "WallpaperEngine/Logging/Log.h"
+ #include <exception>
+@@ -717,6 +718,12 @@ const std::string& ShaderUnit::compile () {
+     this->m_final
+ 	+= this->applyFragmentTexCoordCompatibility (this->applyLinkedVaryingCompatibility (this->m_preprocessed));
+ 
++    // Some Workshop shaders use HLSL identifiers that are reserved in GLSL.
++    this->m_final = std::regex_replace (this->m_final, std::regex (R"(\binput\b)"), "we_shaderInput");
++    if (this->m_type == GLSLContext::UnitType_Fragment) {
++	this->m_final = writableTexCoord (this->m_final);
++    }
++
+     // the pass itself handles shader compilation, the unit doesn't have enough information for this step
+     return this->m_final;
+ }
+diff --git a/src/WallpaperEngine/Render/Shaders/Compatibility.h b/src/WallpaperEngine/Render/Shaders/Compatibility.h
+new file mode 100644
+index 0000000..5d493c8
+--- /dev/null
++++ b/src/WallpaperEngine/Render/Shaders/Compatibility.h
+@@ -0,0 +1,23 @@
++#pragma once
++#include <regex>
++#include <string>
++
++namespace WallpaperEngine::Render::Shaders {
++// HLSL permits assigning to interpolated parameters. GLSL fragment inputs are
++// read-only: keep the interface name and redirect uses to a per-fragment copy.
++inline std::string writableTexCoord (std::string source) {
++    const std::regex assignment (R"(\bv_TexCoord(?:\.[xyzwrgba]{1,4})?\s*(?:[+*/-]?=(?!=)|\+\+|--))");
++    const std::regex declaration (R"(\bvarying\s+(vec[234])\s+v_TexCoord\s*;)");
++    const std::regex mainFunction (R"(\bvoid\s+main\s*\(\s*(?:void\s*)?\)\s*\{)");
++    std::smatch match;
++    if (!std::regex_search (source, assignment) || !std::regex_search (source, match, declaration)
++        || !std::regex_search (source, mainFunction)) {
++        return source;
++    }
++    source = std::regex_replace (source, std::regex (R"(\bv_TexCoord\b)"), "we_localTexCoord");
++    source = std::regex_replace (source, std::regex (R"(\bvarying\s+(vec[234])\s+we_localTexCoord\s*;)"),
++                                "varying $1 v_TexCoord;\n$1 we_localTexCoord;");
++    return std::regex_replace (source, mainFunction, "$&\nwe_localTexCoord = v_TexCoord;",
++                               std::regex_constants::format_first_only);
++}
++}

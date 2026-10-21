@@ -33,7 +33,7 @@ O aplicativo oficial continua sendo usado para escolher wallpapers. Esta integra
 |---|---|
 | **Python 3** | Instalador, detecção do desktop, sincronização da seleção, tratamento de imagens, inicialização e testes. |
 | **JavaScript / GJS** | Extensões e preferências do GNOME, integração com o GDM e comunicação com a interface oficial. |
-| **C++20** | Renderizador `linux-wallpaperengine`, com adaptações locais de comportamento da janela. |
+| **C++20** | Renderizador `linux-wallpaperengine`, com adaptações locais de janela e leitura de cenas. |
 | **Bash** | Cabeçalho do instalador executável e preparação da extração do pacote. |
 | **QML** | Addon de terceiros usado na integração experimental com KDE Plasma 6. |
 | **XML e JSON** | Esquemas GSettings, protocolos, metadados e configurações. |
@@ -77,10 +77,10 @@ O GDM continua como auxiliar interno separado por exigir privilégios de adminis
 
 ### Instalação por download do GitHub
 
-O comando abaixo baixa o instalador da versão **v0.2.0**, instala os requisitos ausentes, confere o SHA-256 e coloca a integração na pasta oculta `~/.local/share/wallpaper-engine`:
+O comando abaixo baixa o instalador da versão **v0.2.1**, instala os requisitos ausentes, confere o SHA-256 e coloca a integração na pasta oculta `~/.local/share/wallpaper-engine`:
 
 ```bash
-arquivo_we=$(mktemp) && curl -fL https://raw.githubusercontent.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/v0.2.0/install.sh -o "$arquivo_we" && bash "$arquivo_we"; resultado_we=$?; [ -z "${arquivo_we:-}" ] || rm -f "$arquivo_we"; (exit "$resultado_we")
+arquivo_we=$(mktemp) && curl -fL https://raw.githubusercontent.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/v0.2.1/install.sh -o "$arquivo_we" && bash "$arquivo_we"; resultado_we=$?; [ -z "${arquivo_we:-}" ] || rm -f "$arquivo_we"; (exit "$resultado_we")
 ```
 
 É um comando completo para copiar e colar no terminal. Requer Bash e `curl` para iniciar o download, além de `sudo` configurado quando forem necessárias alterações de administrador. Execute com seu usuário normal, **sem `sudo` no comando inteiro**. Se faltarem pacotes do sistema, a instalação solicita a autenticação de administrador uma vez e reutiliza essa autorização apenas enquanto o instalador estiver em execução. A pergunta de início automático continua no final.
@@ -180,7 +180,19 @@ gnome-extensions prefs wallpaperengine@waylandwe
 
 Com o início automático ativado, não é necessário abrir o aplicativo oficial em cada inicialização. A integração utiliza a última configuração ou seleção registrada. O autostart XDG permite iniciar a integração em sessões sem systemd de usuário.
 
-A instalação preserva o wallpaper, o FPS e o volume já configurados. A resolução física foi ajustada para **1920×1080 e 60 FPS neste computador**; isso não representa uma configuração universal. Resolução e FPS maiores aumentam o consumo de GPU, e a nitidez depende também do conteúdo original.
+A instalação preserva o wallpaper, o FPS e o volume já configurados. O lançador GNOME consulta a resolução física do monitor, considerando a escala da sessão e a orientação. Não há um limite fixo de 1920×1080: o tamanho da saída acompanha o monitor, enquanto as texturas da cena mantêm sua resolução original. Um arquivo 4K em um monitor Full HD é reduzido para a resolução da tela.
+
+### Qualidade de cenas e vídeos
+
+- **Cenas:** o ajuste de FPS controla o motor. O parser aceita o espaçamento de texto em dois eixos usado por cenas como Obsessed Carolyn e 麻匪 Elisa; anteriormente esse formato encerrava o renderizador.
+- **Vídeos:** preservam sua taxa de quadros original, sem o filtro que forçava todos a 60 FPS. A janela acompanha o monitor escolhido e não se redimensiona ao mudar a resolução do vídeo.
+- **Rotação:** o lançador inspeciona os metadados com `ffprobe` e desativa a rotação automática quando encontra uma matriz com cisalhamento inválido, como no arquivo Re:zero Subaru testado. Rotações válidas são preservadas.
+
+O runtime em contêiner inclui o decodificador completo de H.264/HEVC (`libavcodec-freeworld`) e drivers VA-API Intel, obtidos do RPM Fusion. Isso evita depender exclusivamente do OpenH264 para vídeos com perfis que ele não decodifica corretamente. Esses pacotes ficam no contêiner; não substituem os pacotes do sistema hospedeiro. A escolha está alinhada à [documentação de aceleração de vídeo do Fedora](https://fedoraproject.org/wiki/Hardware_Video_Acceleration). No modo nativo, disponibilize `mpv`, `ffprobe` e os codecs adequados na sua distribuição.
+
+**Limitações verificadas nas cenas citadas:** Obsessed Carolyn e 麻匪 Elisa deixam de encerrar por causa do formato de espaçamento do texto. Há adaptações adicionais para shaders que alteram coordenadas interpoladas e para o comando `commands/copy`. Isso não equivale a reproduzir integralmente essas cenas: nas capturas de teste ainda aparecem diferenças de contraste no Carolyn e partes deformadas/ausentes no Elisa. Esses problemas restantes são de compatibilidade do motor com efeitos e modelos, não um limite de resolução 1080p.
+
+Resolução e FPS maiores aumentam o consumo de GPU e memória. A nitidez também depende do conteúdo original. Uma cena pode utilizar recursos do Wallpaper Engine ainda não implementados no motor Linux; corrigir o tamanho da saída não garante compatibilidade com todos os efeitos, luzes, scripts ou formatos de textura. O log da última execução fica em `~/.local/share/wallpaper-engine/state/renderer.log`.
 
 ## Tela de login — GDM
 

@@ -1,10 +1,17 @@
 # Isolate native dependencies from the host distribution, including immutable hosts.
 FROM registry.fedoraproject.org/fedora:44
-RUN dnf install -y cmake gcc-c++ make git zlib-devel lz4-devel ffmpeg-free-devel \
+RUN dnf install -y cmake gcc-c++ make git zlib-devel lz4-devel ffmpeg-free-devel ffmpeg-free \
     libX11-devel libXrandr-devel libXxf86vm-devel libXinerama-devel libXcursor-devel \
     libXi-devel mesa-libGL-devel mesa-libEGL-devel glew-devel glfw-devel glm-devel \
     SDL2-devel freeglut-devel pulseaudio-libs-devel mpv-devel mpv wayland-devel \
     wayland-protocols-devel dbus-devel gmp-devel freetype-devel mesa-dri-drivers \
+    && dnf clean all
+# Full software decoding is needed for high-profile H.264/HEVC wallpapers;
+# OpenH264 alone does not cover the videos used by Workshop scenes.
+RUN dnf install -y \
+    https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-44.noarch.rpm \
+    https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-44.noarch.rpm \
+    && dnf install -y --allowerasing libavcodec-freeworld intel-media-driver libva-intel-driver \
     && dnf clean all
 COPY linux-wallpaperengine /src/linux-wallpaperengine
 RUN cmake -S /src/linux-wallpaperengine -B /tmp/engine-build \

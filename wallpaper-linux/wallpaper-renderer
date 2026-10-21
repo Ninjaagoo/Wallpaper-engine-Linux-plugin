@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 """Execução isolada do renderizador e limpeza do contêiner ao encerrar."""
 import os
+import json
+import math
+import re
 import select
 import shutil
 import signal
@@ -40,29 +43,40 @@ def watch_container(pid_pai, nome):
     container_action('rm', nome, '--force', '--ignore')
 
 
-def physical_geometry(argumentos):
+def monitor_state():
+    from gi.repository import Gio
+    intermediario = Gio.DBusProxy.new_for_bus_sync(
+        Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None,
+        SERVICO_MONITOR, CAMINHO_MONITOR, SERVICO_MONITOR, None)
+    return intermediario.call_sync('GetCurrentState', None, Gio.DBusCallFlags.NONE,
+                                   TEMPO_LIMITE_MONITOR_MS, None).unpack()
+
+
+def monitor_sizes(estado):
+    for logico in sorted(estado[2], key=lambda monitor: not monitor[4]):
+        for monitor in estado[1]:
+            if monitor[0] not in logico[5]:
+                continue
+            for modo in monitor[1]:
+                if modo[6].get('is-current', False):
+                    largura, altura = modo[1:3]
+                    if logico[3] in (1, 3, 5, 7):
+                        largura, altura = altura, largura
+                    yield ((largura, altura),
+                           (round(largura / logico[2]), round(altura / logico[2])))
+
+
+def physical_geometry(argumentos, estado=None):
     argumentos = list(argumentos)
     if '--window' not in argumentos:
         return argumentos
     try:
-        from gi.repository import Gio
-        intermediario = Gio.DBusProxy.new_for_bus_sync(
-            Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE, None,
-            SERVICO_MONITOR, CAMINHO_MONITOR, SERVICO_MONITOR, None)
-        estado = intermediario.call_sync('GetCurrentState', None, Gio.DBusCallFlags.NONE,
-                                TEMPO_LIMITE_MONITOR_MS, None).unpack()
         i = argumentos.index('--window') + 1
         x, y, largura, altura = map(int, argumentos[i].split('x'))
-        for logico in estado[2]:
-            for monitor in estado[1]:
-                if monitor[0] not in logico[5]:
-                    continue
-                for modo in monitor[1]:
-                    if (modo[6].get('is-current', False)
-                            and round(modo[1] / logico[2]) == largura
-                            and round(modo[2] / logico[2]) == altura):
-                        argumentos[i] = f'{x}x{y}x{modo[1]}x{modo[2]}'
-                        return argumentos
+        for fisico, logico in monitor_sizes(monitor_state() if estado is None else estado):
+            if logico == (largura, altura):
+                argumentos[i] = f'{x}x{y}x{fisico[0]}x{fisico[1]}'
+                break
     except Exception as erro:
         print(f'Physical resolution unavailable; retaining original geometry: {erro}', file=sys.stderr)
     return argumentos
@@ -73,18 +87,18 @@ def normalize_path(argumento):
     return str(DIRETORIO_USUARIO) + argumento[len(prefixo):] if argumento.startswith(prefixo + '/') else argumento
 
 
-def build_command(nome, argumentos, usar_mpv):
+def build_command(nome, argumentos, usar_mpv, executavel=None):
     uid = os.getuid()
     ambiente_sessao = os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{uid}')
     sys.path.insert(0, str(INTEGRACAO))
     from desktop_support import steam_libraries, read_config
     nativo = read_config().get('renderer') or shutil.which('linux-wallpaperengine')
-    mecanismo = 'mpv' if usar_mpv else str(AMBIENTE_EXECUCAO / 'linux-wallpaperengine')
+    mecanismo = executavel or ('mpv' if usar_mpv else str(AMBIENTE_EXECUCAO / 'linux-wallpaperengine'))
     if nativo:
         ambiente = dict(os.environ, WALLPAPERENGINE_BACKGROUND='1')
         if not usar_mpv:
             ambiente.update(WAYLAND_DISPLAY='', XDG_SESSION_TYPE='x11')
-        return (['mpv'] if usar_mpv else [nativo]) + [normalize_path(argumento) for argumento in argumentos], ambiente
+        return ([mecanismo] if usar_mpv else [nativo]) + [normalize_path(argumento) for argumento in argumentos], ambiente
     comando = ['podman', 'run', '--rm', '--name', nome, '--pull=never',
                '--userns=keep-id', '--user', f'{uid}:{os.getgid()}',
                '--group-add=keep-groups', '--security-opt=label=disable',
@@ -106,14 +120,72 @@ def build_command(nome, argumentos, usar_mpv):
         comando += ['--env', 'WAYLAND_DISPLAY=', '--env', 'XDG_SESSION_TYPE=x11',
                     '--env', 'WALLPAPERENGINE_BACKGROUND=1']
     comando += ['--env', f'PULSE_SERVER=unix:{ambiente_sessao}/pulse/native',
-                '--env', f'LD_LIBRARY_PATH={AMBIENTE_EXECUCAO}', IMAGEM, mecanismo]
+                '--env', f'HOME={DIRETORIO_USUARIO}',
+                '--env', f'XDG_CACHE_HOME={ESTADO / "cache"}']
+    if not usar_mpv:
+        comando += ['--env', f'LD_LIBRARY_PATH={AMBIENTE_EXECUCAO}']
+    comando += [IMAGEM, mecanismo]
     return comando + [normalize_path(argumento) for argumento in argumentos], None
+
+
+def invalid_display_matrix(matriz):
+    """Reconhece cisalhamento inválido sem descartar rotações de vídeos verticais."""
+    try:
+        linhas = [list(map(int, linha.split(':', 1)[1].split()))
+                  for linha in matriz.splitlines() if ':' in linha]
+    except ValueError:
+        return False
+    if len(linhas) != 3 or any(len(linha) != 3 for linha in linhas):
+        return False
+    a, b = linhas[0][:2]
+    c, d = linhas[1][:2]
+    norma = math.hypot(a, b) * math.hypot(c, d)
+    return norma == 0 or abs(a * c + b * d) / norma > 0.001
+
+
+def video_arguments(argumentos, metadados=None, geometria=None):
+    # O filtro fps exige processamento adicional e altera a cadência original.
+    argumentos = [argumento for argumento in argumentos
+                  if not re.fullmatch(r'--vf=fps=[0-9.]+', argumento)]
+    opcoes = ['--auto-window-resize=no', '--keepaspect-window=no']
+    if geometria and not any(argumento.startswith('--geometry=') for argumento in argumentos):
+        opcoes.append(f'--geometry={geometria[0]}x{geometria[1]}')
+    if not any(argumento.startswith('--video-rotate=') for argumento in argumentos):
+        for fluxo in (metadados or {}).get('streams', []):
+            for dado in fluxo.get('side_data_list', []):
+                if invalid_display_matrix(dado.get('displaymatrix', '')):
+                    opcoes.append('--video-rotate=no')
+                    break
+    return opcoes + argumentos
+
+
+def prepare_video(nome, argumentos):
+    metadados = None
+    geometria = None
+    try:
+        comando, ambiente = build_command(nome + '-probe', [
+            '-v', 'error', '-select_streams', 'v:0', '-show_streams',
+            '-of', 'json', normalize_path(argumentos[-1])], True, 'ffprobe')
+        resultado = subprocess.run(comando, env=ambiente, capture_output=True,
+                                   text=True, timeout=15, check=True)
+        metadados = json.loads(resultado.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError) as erro:
+        if shutil.which('podman'):
+            container_action('rm', nome + '-probe', '--force', '--ignore')
+        print(f'Não foi possível inspecionar o vídeo: {erro}', file=sys.stderr)
+    try:
+        geometria = next(monitor_sizes(monitor_state()))[1]
+    except Exception as erro:
+        print(f'Geometria do vídeo indisponível: {erro}', file=sys.stderr)
+    return video_arguments(argumentos, metadados, geometria)
 
 
 def run_renderer(argumentos):
     ESTADO.mkdir(parents=True, exist_ok=True)
     nome = 'wallpaper-renderer-' + uuid.uuid4().hex[:10]
     usar_mpv = Path(sys.argv[0]).name == 'wallpaper-mpv'
+    if usar_mpv:
+        argumentos = prepare_video(nome, argumentos)
     comando, ambiente = build_command(nome, physical_geometry(argumentos), usar_mpv)
 
     def stop(*_):
@@ -129,6 +201,8 @@ def run_renderer(argumentos):
     signal.signal(signal.SIGUSR1, lambda *_: processo.send_signal(signal.SIGSTOP) if ambiente is not None else container_action('pause', nome))
     signal.signal(signal.SIGUSR2, lambda *_: processo.send_signal(signal.SIGCONT) if ambiente is not None else container_action('unpause', nome))
     with (ESTADO / 'renderer.log').open('w') as registro:
+        registro.write('Renderer arguments: ' + json.dumps(argumentos, ensure_ascii=False) + '\n')
+        registro.flush()
         processo = subprocess.Popen(comando, stdout=registro, stderr=subprocess.STDOUT, env=ambiente)
         # The watcher survives an abrupt GNOME launcher termination.
         if ambiente is None:

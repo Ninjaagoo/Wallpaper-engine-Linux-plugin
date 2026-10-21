@@ -1,0 +1,40 @@
+diff --git a/src/WallpaperEngine/Data/Model/Object.h b/src/WallpaperEngine/Data/Model/Object.h
+index c346aab..14f9c68 100644
+--- a/src/WallpaperEngine/Data/Model/Object.h
++++ b/src/WallpaperEngine/Data/Model/Object.h
+@@ -611,7 +611,7 @@ struct TextData {
+     /** Vertical alignment: "top", "center", "bottom" */
+     std::string verticalalign;
+     /** Padding inside the bounding box */
+-    int padding;
++    glm::vec2 padding;
+     // TODO: PARSE LIMITS TOO!
+ };
+ 
+diff --git a/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp b/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
+index 4e35f5a..6549bc7 100644
+--- a/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
++++ b/src/WallpaperEngine/Data/Parsers/ObjectParser.cpp
+@@ -123,6 +123,13 @@ SoundUniquePtr ObjectParser::parseSound (const JSON& it, ObjectData base) {
+ }
+ 
+ TextUniquePtr ObjectParser::parseText (const JSON& it, const Project& project, ObjectData base) {
++    // Scene files store horizontal/vertical padding as a vector string. Older
++    // files can use a scalar, which applies to both axes.
++    glm::vec2 padding (0.0f);
++    if (const auto value = it.optional ("padding")) {
++	padding = value->is_number () ? glm::vec2 (value->get<float> ())
++	                             : Builders::VectorBuilder::parse<2, float, glm::defaultp> (value->get<std::string> ());
++    }
+     return std::make_unique<Text> (
+ 	std::move (base),
+ 	TextData {
+@@ -136,7 +143,7 @@ TextUniquePtr ObjectParser::parseText (const JSON& it, const Project& project, O
+ 	    .visible = it.user ("visible", project.properties, true),
+ 	    .alignment = it.optional ("horizontalalign", it.optional ("alignment", std::string ("center"))),
+ 	    .verticalalign = it.optional ("verticalalign", std::string ("center")),
+-	    .padding = it.optional ("padding", 0),
++	    .padding = padding,
+ 	}
+     );
+ }

@@ -24,7 +24,7 @@ const CLASSES_JANELA_RENDERIZADOR = [
 
 // Bumped on every code change; logged from enable() so we can tell which
 // revision the running shell actually loaded (see the comment there).
-const REVISAO_CODIGO = 11;
+const REVISAO_CODIGO = 12;
 
 const SIGTERM = 15;
 const SIGCONT = 12; // launcher: unpause container
@@ -329,7 +329,7 @@ export default class WallpaperEngineExtension extends Extension {
             return null;
         }
 
-        const fps = this._configuracoes.get_int('fps');
+        const geometria = this._targetGeometry();
         const escala = this._configuracoes.get_string('scaling');
         const silenciado = this._configuracoes.get_boolean('mute');
         const volume = this._configuracoes.get_int('volume');
@@ -353,7 +353,9 @@ export default class WallpaperEngineExtension extends Extension {
             `--title=${ID_APLICATIVO_MPV}`,
             `--wayland-app-id=${ID_APLICATIVO_MPV}`,
             `--x11-name=${ID_APLICATIVO_MPV}`,
-            `--vf=fps=${fps}`,
+            `--geometry=${geometria.width}x${geometria.height}`,
+            '--auto-window-resize=no',
+            '--keepaspect-window=no',
             `--volume=${volume}`,
             silenciado ? '--mute=yes' : '--mute=no',
         ];
