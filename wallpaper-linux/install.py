@@ -130,6 +130,33 @@ def patch_wallpaper_interface():
 
 
 
+def patch_property_interface(origem, url):
+    marcador = '/*linux-property-sync-v1*/'
+    if marcador in origem:
+        return origem
+    for variavel in ('e', 'a'):
+        chamada = 'j.callDeferred("browseWallpaperObject","applySingleProperty",angular.toJson(' + variavel + '))'
+        if origem.count(chamada) != 1:
+            raise ValueError('A interface de propriedades mudou; arquivo preservado')
+        sinalizador = ('(function(d){try{var i=new Image();i.src=' + json.dumps(url)
+                      + '+encodeURIComponent(JSON.stringify(d))+"&t="+Date.now();}catch(_){}})('
+                      + variavel + ')')
+        origem = origem.replace(chamada, '(' + sinalizador + ',' + chamada + ')')
+    return origem + '\n' + marcador + '\n'
+
+
+def install_property_sync():
+    origem = SCRIPTS_INTERFACE.read_text()
+    url = (f'http://127.0.0.1:{PORTA_SINCRONIZACAO}/properties?token='
+           + (ESTADO / 'selection-token').read_text().strip() + '&data=')
+    modificado = patch_property_interface(origem, url)
+    if modificado != origem:
+        candidato = ESTADO / 'wallpaper-ui-properties.js'
+        candidato.write_text(modificado)
+        subprocess.run(['node', '--check', str(candidato)], check=True)
+        shutil.copyfile(candidato, SCRIPTS_INTERFACE)
+
+
 def install_sync_files():
     INTEGRACAO.mkdir(parents=True, exist_ok=True)
     for nome in ('selection-sync.py', 'desktop_support.py', 'paths.py'):
@@ -171,6 +198,7 @@ WantedBy=graphical-session.target
 
 def install_selection_sync():
     patch_wallpaper_interface()
+    install_property_sync()
     install_sync_files()
     install_user_service()
 
@@ -220,6 +248,8 @@ def configure_login_background():
 
 
 def configure_startup(escolha, configuracao):
+    if PROGRESSO is not None:
+        PROGRESSO.complete()
     if escolha == 'ask':
         if not os.sys.stdin.isatty():
             raise SystemExit('Para instalação sem interação, informe --startup yes ou --startup no.')
@@ -301,7 +331,7 @@ def main():
     if AMBIENTE_GRAFICO == 'gnome' and (argumentos_cli.fundo_login or Path('/usr/local/share/gnome-shell/extensions/firewatch-login@local').is_dir()):
         progresso.update(90, 'Atualizando imagem da tela de login…')
         configure_login_background()
-    progresso.update(95, 'Arquivos instalados. Configurando preferência de inicialização…')
+    progresso.update(95, 'Preparando escolha de início automático…')
     configure_startup(argumentos_cli.inicio_automatico, configuracao)
     progresso.update(100, 'Concluído! Integração instalada.')
     if AMBIENTE_GRAFICO == 'xfce' or (AMBIENTE_GRAFICO == 'kde' and not kde_live_available()):
@@ -314,8 +344,8 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (OSError, subprocess.CalledProcessError) as erro:
-        (PROGRESSO or Progress()).error(str(erro))
+    except (OSError, ValueError, subprocess.CalledProcessError) as erro:
+        (PROGRESSO or Progress()).error(erro)
         raise SystemExit(1)
     except SystemExit as erro:
         if isinstance(erro.code, str):

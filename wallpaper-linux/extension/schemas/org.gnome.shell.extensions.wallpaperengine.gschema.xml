@@ -69,6 +69,16 @@
       <description>Wallpaper audio volume in percent, used when not muted.</description>
     </key>
 
+    <key name="wallpaper-properties" type="s">
+      <default>'{}'</default>
+      <summary>Custom properties of the selected scene</summary>
+    </key>
+
+    <key name="official-policy" type="s">
+      <default>'{}'</default>
+      <summary>Compatible playback settings from the official app</summary>
+    </key>
+
     <key name="fps" type="i">
       <range min="1" max="240"/>
       <default>30</default>

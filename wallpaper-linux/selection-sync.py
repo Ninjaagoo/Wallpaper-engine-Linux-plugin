@@ -3,8 +3,10 @@
 import colorsys
 import json
 import logging
+import math
 import re
 import secrets
+import shutil
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,22 +18,27 @@ from PIL import Image
 from desktop_support import (detect_desktop, workshop_folder, wallpaper_app,
                              apply_static, kde_live_available, apply_kde_live, allow_current_gnome_session)
 
-DIRETORIO_USUARIO = Path.home().resolve()
 from paths import ESTADO, FUNDOS
+
+DIRETORIO_USUARIO = Path.home().resolve()
 UUID = 'wallpaperengine@waylandwe'
 EXTENSAO = DIRETORIO_USUARIO / '.local/share/gnome-shell/extensions' / UUID
 ESQUEMA = 'org.gnome.shell.extensions.wallpaperengine'
 PORTA = 49367
 ARQUIVO_TOKEN = ESTADO / 'selection-token'
 ULTIMA_SELECAO = ESTADO / 'last-selection.json'
+PROPRIEDADES = ESTADO / 'wallpaper-properties'
+RELATORIO_CONFIGURACOES = ESTADO / 'official-settings-status.json'
 FUNDO_LOGIN = Path('/var/lib/wallpaper-engine-login/background.png')
 ENDERECO_LOCAL = '127.0.0.1'
 INTERVALO_SELECAO_SEGUNDOS = 0.3
+INTERVALO_CONFIGURACOES_SEGUNDOS = 3
 TAMANHO_AMOSTRA = (80, 80)
 SATURACAO_MINIMA = 0.28
 BRILHO_MINIMO = 0.20
 COR_DESTAQUE_PADRAO = 'slate'
 COR_FUNDO = '#161616'
+TRAVA_PROPRIEDADES = threading.Lock()
 TIPOS_SUPORTADOS = ('scene', 'video')
 PADRAO_WORKSHOP = re.compile(r'(?:^|/)workshop/content/431960/(\d+)(?:/|$)', re.I)
 PALETA = {'blue': '#3584e4', 'teal': '#2190a4', 'green': '#3a944a',
@@ -97,7 +104,6 @@ def sync_static_background(pasta, projeto, ambiente_grafico="gnome"):
         temporario.replace(destino)
     if ambiente_grafico == 'gnome' and FUNDO_LOGIN.parent.is_dir():
         try:
-            import shutil
             temporario_login = FUNDO_LOGIN.with_suffix('.tmp')
             shutil.copyfile(destino, temporario_login)
             temporario_login.chmod(0o644)
@@ -145,17 +151,61 @@ def apply_selection(arquivo):
         sync_static_background(pasta, projeto)
     except (OSError, ValueError):
         logging.exception('Não foi possível sincronizar a prévia estática')
-    gset('workshop-path', str(pasta.parent))
-    gset('wallpaper-id', pasta.name)
-    gset('engine', 'wallpaperengine' if tipo == 'scene' else 'mpv')
-    if tipo == 'video':
-        gset('video-path', str(midia))
-    gset('enabled', True)
-    subprocess.run(['gnome-extensions', 'enable', UUID], check=True)
-    subprocess.run(['gsettings', 'set', 'org.gnome.desktop.interface', 'accent-color', destaque], check=True)
-    resultado = {'id': pasta.name, 'title': projeto.get('title'), 'type': tipo, 'accent': destaque}
-    ULTIMA_SELECAO.write_text(json.dumps(resultado, ensure_ascii=False, indent=2))
+    with TRAVA_PROPRIEDADES:
+        gset('workshop-path', str(pasta.parent))
+        arquivo_propriedades = PROPRIEDADES / (pasta.name + '.json')
+        propriedades = json.loads(arquivo_propriedades.read_text()) if arquivo_propriedades.exists() else {}
+        gset('wallpaper-properties', json.dumps(propriedades, sort_keys=True))
+        gset('wallpaper-id', pasta.name)
+        gset('engine', 'wallpaperengine' if tipo == 'scene' else 'mpv')
+        if tipo == 'video':
+            gset('video-path', str(midia))
+        gset('enabled', True)
+        subprocess.run(['gnome-extensions', 'enable', UUID], check=True)
+        subprocess.run(['gsettings', 'set', 'org.gnome.desktop.interface', 'accent-color', destaque], check=True)
+        resultado = {'id': pasta.name, 'title': projeto.get('title'), 'type': tipo, 'accent': destaque}
+        ULTIMA_SELECAO.write_text(json.dumps(resultado, ensure_ascii=False, indent=2))
     logging.info('Seleção aplicada: %s', resultado)
+
+
+def property_values(projeto, propriedades):
+    if not isinstance(propriedades, dict) or len(propriedades) > 256:
+        raise ValueError('Propriedades inválidas')
+    declaradas = projeto.get('general', {}).get('properties', {})
+    valores = {}
+    for chave, propriedade in propriedades.items():
+        if chave not in declaradas or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', chave):
+            continue
+        valor = propriedade.get('value') if isinstance(propriedade, dict) else propriedade
+        if isinstance(valor, bool):
+            valores[chave] = '1' if valor else '0'
+        elif isinstance(valor, (int, float)) and abs(valor) <= 1e308 and math.isfinite(valor):
+            valores[chave] = str(valor)
+        elif isinstance(valor, str) and len(valor) <= 4096:
+            valores[chave] = valor
+    return valores
+
+
+def apply_properties(dados):
+    if not isinstance(dados, dict) or not isinstance(dados.get('file'), str):
+        raise ValueError('Dados de propriedades inválidos')
+    pasta, projeto, tipo, _midia = resolve_selection(dados['file'])
+    if tipo != 'scene':
+        raise ValueError('Propriedades personalizadas disponíveis somente para cenas')
+    valores = property_values(projeto, dados['properties'])
+    PROPRIEDADES.mkdir(parents=True, exist_ok=True)
+    destino = PROPRIEDADES / (pasta.name + '.json')
+    with TRAVA_PROPRIEDADES:
+        anteriores = json.loads(destino.read_text()) if destino.exists() else {}
+        anteriores.update(valores)
+        temporario = destino.with_suffix('.tmp')
+        temporario.write_text(json.dumps(anteriores))
+        temporario.replace(destino)
+        # Only update the currently selected scene; delayed UI events for a
+        # previous wallpaper must not change the current renderer.
+        if detect_desktop() == 'gnome' and ULTIMA_SELECAO.exists():
+            if json.loads(ULTIMA_SELECAO.read_text()).get('id') == pasta.name:
+                gset('wallpaper-properties', json.dumps(anteriores, sort_keys=True))
 
 
 class PendingSelection:
@@ -184,6 +234,62 @@ class PendingSelection:
                 logging.exception('Não foi possível aplicar a seleção')
 
 
+def read_official_fps(dados):
+    fps = dados.get('steamuser', {}).get('general', {}).get('user', {}).get('fps')
+    if isinstance(fps, bool) or not isinstance(fps, (int, float)) or not 1 <= fps <= 240:
+        raise ValueError('FPS oficial ausente ou fora do intervalo suportado (1–240)')
+    return int(fps)
+
+
+def official_render_policy(dados):
+    usuario = dados.get('steamuser', {}).get('general', {}).get('user', {})
+    politica = {}
+    for chave in ('playbackfocus', 'playbackfullscreen', 'playbackmaximized', 'playbackonbattery'):
+        valor = usuario.get(chave)
+        if valor in ('run', 'pause', 'stop'):
+            politica[chave] = valor
+    for chave in ('videoaudiooutput', 'videohardwareacceleration'):
+        if isinstance(usuario.get(chave), bool):
+            politica[chave] = usuario[chave]
+    return politica
+
+
+def sync_official_settings(arquivo, anterior):
+    dados = json.loads(arquivo.read_text())
+    politica = official_render_policy(dados)
+    fps = read_official_fps(dados)
+    atual = {'fps': fps, 'policy': politica}
+    if atual != anterior:
+        if anterior is None or fps != anterior['fps']:
+            gset('fps', fps)
+        if anterior is None or politica != anterior['policy']:
+            gset('official-policy', json.dumps(politica, sort_keys=True))
+        usuario = dados.get('steamuser', {}).get('general', {}).get('user', {})
+        suportadas = ['fps', *politica]
+        relatorio = {'applied': suportadas,
+                     'stop_behavior': 'pause: mantém o processo e libera CPU, sem descarregar VRAM',
+                     'not_mapped': sorted(set(usuario) - set(suportadas))}
+        RELATORIO_CONFIGURACOES.parent.mkdir(parents=True, exist_ok=True)
+        temporario = RELATORIO_CONFIGURACOES.with_suffix('.tmp')
+        temporario.write_text(json.dumps(relatorio, ensure_ascii=False, indent=2))
+        temporario.replace(RELATORIO_CONFIGURACOES)
+        logging.info('Configurações oficiais sincronizadas: %s', suportadas)
+    return atual
+
+
+def watch_official_settings():
+    if detect_desktop() != 'gnome':
+        return
+    anterior = None
+    espera = threading.Event()
+    while True:
+        try:
+            anterior = sync_official_settings(wallpaper_app() / 'config.json', anterior)
+        except (OSError, ValueError, TypeError, AttributeError, subprocess.CalledProcessError):
+            pass  # Retry partial official writes without losing the last valid settings.
+        espera.wait(INTERVALO_CONFIGURACOES_SEGUNDOS)
+
+
 def main():
     ESTADO.mkdir(parents=True, exist_ok=True)
     if not ARQUIVO_TOKEN.exists():
@@ -197,13 +303,22 @@ def main():
         def do_GET(self):
             url = urlsplit(self.path)
             consulta = parse_qs(url.query)
-            if url.path != '/select' or not secrets.compare_digest(consulta.get('token', [''])[0], token):
+            if len(self.path) > 65536:
+                self.send_error(414)
+                return
+            if url.path not in ('/select', '/properties') or not secrets.compare_digest(consulta.get('token', [''])[0], token):
                 self.send_error(403)
                 return
             try:
+                if url.path == '/properties':
+                    apply_properties(json.loads(consulta['data'][0]))
+                    self.send_response(204)
+                    self.send_header('Cache-Control', 'no-store')
+                    self.end_headers()
+                    return
                 arquivo = consulta['file'][0]
                 resolve_selection(arquivo)
-            except (KeyError, ValueError, OSError) as erro:
+            except (KeyError, ValueError, OSError, TypeError) as erro:
                 logging.warning('Seleção recusada: %s', erro)
                 self.send_error(400)
                 return
@@ -224,6 +339,7 @@ def main():
             fila.submit(str(workshop_folder(anterior['id'])))
         except (ValueError, KeyError):
             logging.warning('Previous wallpaper is no longer available.')
+    threading.Thread(target=watch_official_settings, daemon=True).start()
     servidor.serve_forever()
 
 

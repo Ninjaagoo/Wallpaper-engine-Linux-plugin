@@ -6,22 +6,22 @@ Integração comunitária desenvolvida e adaptada por **ninjaagoo**, a partir de
 
 > **Em desenvolvimento:** não é um produto oficial do Wallpaper Engine e ainda não reproduz todos os recursos do motor original. Algumas cenas podem apresentar partes ausentes, cores incorretas, efeitos diferentes ou modelos deformados. Compilar os shaders sem erros não garante fidelidade visual.
 
-O ambiente testado é **Bazzite, GNOME 50, Wayland e GPU Intel**. Consulte a tabela de [Compatibilidade](#compatibilidade) para os demais ambientes.
+O ambiente de referência é **Bazzite, GNOME 50, Wayland e GPU Intel**. Consulte a tabela de [Compatibilidade](#compatibilidade) para os demais ambientes.
 
-[Instalar](#instalação) · [Como usar](#como-usar) · [Compatibilidade](#compatibilidade) · [Diagnóstico](#diagnóstico-e-atualização) · [Créditos](#desenvolvimento-e-créditos)
+[Instalar](#instalação) · [Como usar](#como-usar) · [Compatibilidade](#compatibilidade) · [Diagnóstico](#diagnóstico-e-atualização) · [Relatar problema](#problemas-sugestões-e-contribuições) · [Créditos](#desenvolvimento-e-créditos)
 
 ## Exemplos visuais
 
-| Captura de teste local | Exemplo do motor original |
+| Captura local | Exemplo do motor original |
 |---|---|
-| ![Dark Queen renderizado em teste local 4K](docs/media/dark-queen-4k.png) | ![Cena de NieR Automata demonstrada pelo motor original](docs/media/wallpaper-exemplo.png) |
+| ![Dark Queen renderizado localmente em 4K](docs/media/dark-queen-4k.png) | ![Cena de NieR Automata demonstrada pelo motor original](docs/media/wallpaper-exemplo.png) |
 | **Dark Queen [4K]** — captura do renderizador local em 3840 × 2160, usando Xvfb/Mesa. | **NieR Automata** — quadro da demonstração publicada pelo projeto base. |
 
 ### Wallpaper em animação
 
 ![Demonstração animada de uma cena no linux-wallpaperengine](docs/media/wallpaper-animado.gif)
 
-O GIF e o quadro de NieR Automata vêm de [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine/tree/b016d7d1fdcf4e5fd2f9c9fa420a8aaa07fee02d/docs/images). São demonstrações do motor original, não gravações desta integração no GNOME. A captura local documenta um teste específico; não garante compatibilidade com todos os wallpapers. As imagens pertencem aos respectivos autores.
+O GIF e o quadro de NieR Automata vêm de [Almamu/linux-wallpaperengine](https://github.com/Almamu/linux-wallpaperengine/tree/b016d7d1fdcf4e5fd2f9c9fa420a8aaa07fee02d/docs/images). São demonstrações do motor original, não gravações desta integração no GNOME. A captura local não garante compatibilidade com todos os wallpapers. As imagens pertencem aos respectivos autores.
 
 ## Instalação
 
@@ -42,12 +42,12 @@ O instalador tenta instalar Python 3, Pillow, Node.js, Podman e as ferramentas n
 Copie a linha inteira no terminal, usando seu usuário normal, **sem colocar `sudo` no início**:
 
 ```bash
-arquivo_we=$(mktemp) && curl -fL https://raw.githubusercontent.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/v0.2.2-rc.1/install.sh -o "$arquivo_we" && bash "$arquivo_we"; resultado_we=$?; [ -z "${arquivo_we:-}" ] || rm -f "$arquivo_we"; (exit "$resultado_we")
+arquivo_we=$(mktemp) && curl -fL https://raw.githubusercontent.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/v0.2.2-rc.2/install.sh -o "$arquivo_we" && bash "$arquivo_we"; resultado_we=$?; [ -z "${arquivo_we:-}" ] || rm -f "$arquivo_we"; (exit "$resultado_we")
 ```
 
-Esse comando instala a pré-lançamento experimental **v0.2.2-rc.1**: baixa o pacote, confere o SHA-256, prepara as dependências e instala a integração. Ele inclui as adaptações atuais de shaders, composição e troca de wallpaper, ainda sujeitas às limitações descritas acima.
+Esse comando instala o pré-lançamento experimental **v0.2.2-rc.2**: baixa o pacote, confere o SHA-256, prepara as dependências e instala a integração. Ele inclui as adaptações atuais de shaders, composição e troca de wallpaper, ainda sujeitas às limitações descritas acima.
 
-Se necessário, o instalador solicita autenticação de administrador e reutiliza a autorização durante a execução. As etapas mostram porcentagens: vermelho no início, laranja de 50–79% e verde de 80–100%. Elas representam etapas concluídas, não tempo restante.
+Se necessário, o instalador solicita autenticação de administrador e reutiliza a autorização durante a execução. No terminal, cada etapa atualiza sua própria barra. Ao terminar, ela é substituída por **“Concluído!”** ou **“Instalado com sucesso!”**, preservando o histórico nas linhas anteriores. Se uma etapa falhar, o instalador informa qual foi e o motivo. As cores da barra são: vermelho no início, laranja de 50–79% e verde de 80–100%. As porcentagens representam etapas concluídas, não tempo restante.
 
 **No Bazzite e em outros sistemas `rpm-ostree`:** se forem adicionados pacotes ao sistema, reinicie e execute o mesmo comando para concluir. O instalador avisa e não reinicia o computador sozinho.
 
@@ -87,16 +87,28 @@ Para compilar ou instalar pelos fontes, consulte [Opções avançadas](#opções
 
 Com o início automático ativado, a última seleção é carregada ao entrar na sessão, sem precisar abrir o aplicativo oficial novamente.
 
-Para cenas, comece com **30 FPS** para reduzir o consumo. Vídeos preservam sua taxa de quadros original. A saída acompanha a resolução física do monitor; usar conteúdo 4K não elimina as limitações do motor nem aumenta a resolução da tela.
+Para cenas, configure **30 FPS ou menos no aplicativo oficial** para reduzir o consumo. Vídeos preservam sua taxa de quadros original. A saída acompanha a resolução física do monitor; usar conteúdo 4K não elimina as limitações do motor nem aumenta a resolução da tela.
 
-As preferências existentes são preservadas na reinstalação. O padrão para novas instalações é 30 FPS.
+As preferências existentes são preservadas na reinstalação. O padrão para novas instalações é 30 FPS. No GNOME, a integração acompanha as configurações salvas pelo aplicativo oficial a cada três segundos.
+
+| Configuração oficial | Comportamento no Linux |
+|---|---|
+| FPS | Aplica o limite às cenas. |
+| Reprodução com foco, tela cheia ou janela maximizada | Pausa conforme as regras oficiais no workspace atual. |
+| Reprodução na bateria | Usa o estado informado pelo UPower. |
+| Saída de áudio de vídeo | Respeita a desativação de áudio nos vídeos. |
+| Aceleração de vídeo | Ativa a seleção automática do mpv ou desativa a decodificação por hardware. |
+| Parar a reprodução | Adaptado para pausar; não descarrega a VRAM. |
+| Propriedades personalizadas de cenas | Envia valores numéricos, cores, texto e opções booleanas ao motor quando alterados na interface. |
+
+Não há sincronização integral de todas as opções: qualidade de sombras, reflexos, pós-processamento, regras por aplicativo e recursos exclusivos do Windows ainda exigem implementação. O relatório `~/.local/share/wallpaper-engine/state/official-settings-status.json` lista as chaves mapeadas e as que não foram traduzidas. As preferências locais de FPS são substituídas pelo valor oficial enquanto a sincronização estiver ativa. Para as propriedades personalizadas, feche e reabra o aplicativo oficial após atualizar e altere os controles desejados uma vez. Os valores passam a ser preservados por cena. Controles gerais que não são declarados pelo projeto do wallpaper não são tratados como propriedades personalizadas. O suporte visual de cada efeito ainda depende do motor.
 
 ## Compatibilidade
 
-| Ambiente | Resultado disponível | Validação |
+| Ambiente | Resultado disponível | Estado |
 |---|---|---|
-| GNOME 50 / Wayland | Wallpaper animado, seleção imediata, cores e fundos sincronizados | Testado no Bazzite |
-| GNOME 45–49 | Extensão declara suporte a essas versões | Não testado localmente |
+| GNOME 50 / Wayland | Wallpaper animado, seleção imediata, cores e fundos sincronizados | Ambiente de referência: Bazzite |
+| GNOME 45–49 | Extensão declara suporte a essas versões | Compatibilidade declarada; funcionamento não confirmado |
 | KDE Plasma 6 com addon | Animação via Application Wallpaper e `xwayland-run` | Experimental; falta validação visual |
 | KDE sem addon | Prévia estática sincronizada | Falta validação visual |
 | XFCE | **Somente prévia estática sincronizada** | Falta validação visual |
@@ -104,7 +116,7 @@ As preferências existentes são preservadas na reinstalação. O padrão para n
 
 A sincronização de cores, do fundo de bloqueio e a extensão de login GDM são específicas do GNOME. Não há integração equivalente de login para SDDM ou LightDM.
 
-**Não há garantia de funcionamento em qualquer distribuição Linux.** Outras GPUs, drivers e arquiteturas precisam de validação; o alcance dos testes está descrito em [Testes](#testes).
+**Não há garantia de funcionamento em qualquer distribuição Linux.** Outras GPUs, drivers e arquiteturas precisam de validação.
 
 ## Funcionalidades
 
@@ -171,7 +183,7 @@ Sem systemd de usuário, consulte `~/.local/share/wallpaper-engine/state/selecti
 | A seleção não chega ao Linux | Feche e reabra o Wallpaper Engine. |
 | Uma atualização oficial removeu a integração | Execute novamente o instalador. |
 | A extensão GNOME foi atualizada | Saia e entre na sessão para carregar o código novo. |
-| Consumo ou aquecimento elevado | Reduza o FPS nas preferências e verifique o consumo dos outros aplicativos. |
+| Consumo ou aquecimento elevado | Reduza o FPS no aplicativo oficial e verifique o consumo dos outros aplicativos. |
 | Partes ausentes, cores ou efeitos incorretos | Pode ser uma limitação do motor experimental; informe o wallpaper, o desktop, a GPU e o log. |
 | KDE ou XFCE sem animação | Confira a tabela de compatibilidade. |
 
@@ -191,16 +203,15 @@ Para iniciar manualmente, execute `~/.local/bin/wallpaper-engine-start`. Para re
 
 A integração utiliza Linux, Podman, GSettings, D-Bus e systemd de usuário.
 
-## Testes
+Foram realizados testes locais da integração, dos shaders e da composição do renderizador. Esses testes não garantem compatibilidade com todos os wallpapers, desktops ou distribuições Linux.
 
-As mudanças são testadas localmente antes de preparar uma versão. Os testes automatizados verificam a integração e partes do renderizador; não substituem a validação visual dos wallpapers e desktops.
+## Problemas, sugestões e contribuições
 
-```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s wallpaper-linux/tests -v
-node tools/test-renderer-lifecycle.mjs
-```
+Encontrou um erro, quer registrar uma reclamação ou sugerir uma melhoria? [Abra uma Issue no GitHub](https://github.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/issues/new/choose). Antes, confira se o problema já foi relatado.
 
-O teste C++ em `tools/test-native-rendering.cpp` verifica parsing, shaders e composição; a opção `--opengl` exige um display OpenGL. Os executáveis distribuídos só recebem as mudanças quando uma nova versão é preparada e publicada.
+Informe sua distribuição, ambiente gráfico, GPU, versão instalada, nome ou link do wallpaper e os passos para reproduzir o problema. Se possível, inclua uma captura e o trecho relevante do log, removendo dados pessoais e tokens.
+
+Contribuições são bem-vindas: você pode criar um fork, estudar e adaptar o código de autoria deste projeto e enviar melhorias por pull request. Preserve os créditos e respeite as licenças e permissões dos componentes de terceiros descritas abaixo. Esse convite não altera os direitos sobre o código externo ou os wallpapers.
 
 ## Desenvolvimento e créditos
 

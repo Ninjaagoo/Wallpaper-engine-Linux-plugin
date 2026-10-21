@@ -24,7 +24,7 @@ const CLASSES_JANELA_RENDERIZADOR = [
 
 // Bumped on every code change; logged from enable() so we can tell which
 // revision the running shell actually loaded (see the comment there).
-const REVISAO_CODIGO = 13;
+const REVISAO_CODIGO = 15;
 
 const SIGTERM = 15;
 const SIGCONT = 12; // launcher: unpause container
@@ -86,7 +86,24 @@ export default class WallpaperEngineExtension extends Extension {
             'monitors-changed', () => this._scheduleRestart());
 
         this._idAlteracaoConfiguracoes = this._configuracoes.connect(
-            'changed', () => this._scheduleRestart());
+            'changed', (_configuracoes, chave) => {
+                this._scheduleRestart();
+                if (chave === 'official-policy')
+                    this._updateOfficialPause();
+            });
+
+        this._telaBloqueada = false;
+        this._energia = null;
+        try {
+            this._energia = Gio.DBusProxy.new_for_bus_sync(
+                Gio.BusType.SYSTEM, Gio.DBusProxyFlags.NONE, null,
+                'org.freedesktop.UPower', '/org/freedesktop/UPower',
+                'org.freedesktop.UPower', null);
+        } catch (_erro) { /* Battery status unavailable on this host. */ }
+        this._idPolitica = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+            this._updateOfficialPause();
+            return GLib.SOURCE_CONTINUE;
+        });
 
         // Suspend rendering while the screensaver / screen blank is active.
         // (The full lock screen additionally disables this extension entirely
@@ -100,7 +117,8 @@ export default class WallpaperEngineExtension extends Extension {
             Gio.DBusSignalFlags.NONE,
             (_conexao, _remetente, _caminho, _interface, _sinal, parametros) => {
                 const [ativo] = parametros.deep_unpack();
-                this._setPaused(ativo);
+                this._telaBloqueada = ativo;
+                this._updateOfficialPause();
             });
 
         if (this._configuracoes.get_boolean('enabled'))
@@ -133,6 +151,11 @@ export default class WallpaperEngineExtension extends Extension {
             this._idProtetorTela = 0;
         }
 
+        if (this._idPolitica) {
+            GLib.source_remove(this._idPolitica);
+            this._idPolitica = 0;
+        }
+        this._energia = null;
         this._clearTimeouts();
         this._stopEngine(true);
         for (const [ator, id] of this._atoresFundo)
@@ -315,6 +338,13 @@ export default class WallpaperEngineExtension extends Extension {
         if (recursos !== '')
             argumentos.push('--assets-dir', recursos);
 
+        try {
+            const propriedades = JSON.parse(this._configuracoes.get_string('wallpaper-properties'));
+            for (const [chave, valor] of Object.entries(propriedades)) {
+                if (/^[A-Za-z0-9_-]{1,128}$/.test(chave) && typeof valor === 'string')
+                    argumentos.push('--set-property', `${chave}=${valor}`);
+            }
+        } catch (_erro) { /* Keep scene defaults if the stored JSON is invalid. */ }
         argumentos.push(cena);
         return argumentos;
     }
@@ -333,7 +363,8 @@ export default class WallpaperEngineExtension extends Extension {
 
         const geometria = this._targetGeometry();
         const escala = this._configuracoes.get_string('scaling');
-        const silenciado = this._configuracoes.get_boolean('mute');
+        const politica = this._officialPolicy();
+        const silenciado = this._configuracoes.get_boolean('mute') || politica.videoaudiooutput === false;
         const volume = this._configuracoes.get_int('volume');
 
         const argumentos = [
@@ -350,7 +381,7 @@ export default class WallpaperEngineExtension extends Extension {
             '--cursor-autohide=no',
             '--no-stop-screensaver',
             '--no-audio-display',
-            '--hwdec=auto-safe',
+            politica.videohardwareacceleration === false ? '--hwdec=no' : '--hwdec=auto-safe',
             '--loop-file=inf',
             `--title=${ID_APLICATIVO_MPV}`,
             `--wayland-app-id=${ID_APLICATIVO_MPV}`,
@@ -568,6 +599,32 @@ export default class WallpaperEngineExtension extends Extension {
                 }
                 return GLib.SOURCE_REMOVE;
             });
+    }
+
+    _officialPolicy() {
+        try {
+            const politica = JSON.parse(this._configuracoes.get_string('official-policy'));
+            return politica && typeof politica === 'object' && !Array.isArray(politica) ? politica : {};
+        }
+        catch (_erro) { return {}; }
+    }
+
+    _updateOfficialPause() {
+        if (this._destruido) return;
+        const politica = this._officialPolicy();
+        const bloquear = chave => ['pause', 'stop'].includes(politica[chave]);
+        const janelas = global.workspace_manager.get_active_workspace().list_windows().filter(
+            janela => janela !== this._janelaRenderizador && !this._windowMatchesRenderer(janela)
+                && janela.get_window_type() === Meta.WindowType.NORMAL
+                && !janela.minimized && janela.showing_on_its_workspace());
+        const bateria = this._energia?.get_cached_property('OnBattery')?.deep_unpack() ?? false;
+        const pausado = this._telaBloqueada
+            || (bloquear('playbackonbattery') && bateria)
+            || (bloquear('playbackfocus') && janelas.includes(global.display.focus_window))
+            || (bloquear('playbackfullscreen') && janelas.some(janela => janela.is_fullscreen()))
+            || (bloquear('playbackmaximized') && janelas.some(
+                janela => janela.maximized_horizontally && janela.maximized_vertically));
+        this._setPaused(pausado);
     }
 
     _setPaused(pausado) {

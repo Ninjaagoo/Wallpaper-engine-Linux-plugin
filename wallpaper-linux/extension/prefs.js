@@ -255,7 +255,7 @@ export default class WallpaperEnginePrefs extends ExtensionPreferences {
 
         const linhaFps = new Adw.ComboRow({
             title: _('FPS Cap'),
-            subtitle: _('Lower values save GPU/CPU and battery'),
+            subtitle: _('Official Wallpaper Engine FPS is synchronized when available; lower values save GPU/CPU'),
             model: Gtk.StringList.new(ROTULOS_FPS),
         });
         const fpsAtual = configuracoes.get_int('fps');

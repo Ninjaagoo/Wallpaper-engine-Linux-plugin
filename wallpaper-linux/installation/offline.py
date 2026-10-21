@@ -68,8 +68,9 @@ def main(raiz):
         install_runtime(raiz / 'runtime', AMBIENTE_EXECUCAO)
         progresso.update(60, 'Instalando scripts, extensão e documentação…')
         install_package_files(raiz)
+        progresso.complete()
         run_integration_installer(argumentos_cli, steam)
     except (OSError, ValueError, subprocess.CalledProcessError) as erro:
-        progresso.error(str(erro))
+        progresso.error(erro)
         raise SystemExit(1)
     print('O aplicativo Wallpaper Engine Linux está no menu. Reabra o Wallpaper Engine da Steam.', flush=True)

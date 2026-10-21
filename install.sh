@@ -2,7 +2,7 @@
 # Baixa a edição correspondente, prepara requisitos e executa como usuário.
 set -euo pipefail
 REPOSITORIO='Ninjaagoo/Wallpaper-engine-Linux-plugin'
-VERSAO='v0.2.2-rc.1'
+VERSAO='v0.2.2-rc.2'
 NOME='WallpaperEngine-Linux-x86_64.run'
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/wallpaper-engine"
 TEMPORARIO=''
