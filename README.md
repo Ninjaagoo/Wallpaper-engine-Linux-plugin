@@ -8,7 +8,12 @@ Integração comunitária desenvolvida e adaptada por **ninjaagoo**, a partir de
 
 O ambiente de referência é **Bazzite, GNOME 50, Wayland e GPU Intel**. Consulte a tabela de [Compatibilidade](#compatibilidade) para os demais ambientes.
 
-[Instalar](#instalação) · [Como usar](#como-usar) · [Compatibilidade](#compatibilidade) · [Diagnóstico](#diagnóstico-e-atualização) · [Relatar problema](#problemas-sugestões-e-contribuições) · [Créditos](#desenvolvimento-e-créditos)
+[![Instalar](https://img.shields.io/badge/Instalar-16A34A?style=for-the-badge&logo=linux&logoColor=white)](#instalação)
+[![Como usar](https://img.shields.io/badge/Como%20usar-2563EB?style=for-the-badge)](#como-usar)
+[![Compatibilidade](https://img.shields.io/badge/Compatibilidade-7C3AED?style=for-the-badge&logo=linux&logoColor=white)](#compatibilidade)
+[![Diagnóstico](https://img.shields.io/badge/Diagn%C3%B3stico-D97706?style=for-the-badge)](#diagnóstico-e-atualização)
+[![Relatar problema](https://img.shields.io/badge/Relatar%20problema-DC2626?style=for-the-badge&logo=github&logoColor=white)](#problemas-sugestões-e-contribuições)
+[![Créditos](https://img.shields.io/badge/Cr%C3%A9ditos-475569?style=for-the-badge&logo=github&logoColor=white)](#desenvolvimento-e-créditos)
 
 ## Exemplos visuais
 
@@ -62,7 +67,11 @@ A integração fica na pasta oculta **`~/.local/share/wallpaper-engine/`** e fun
 
 ### Alternativa: baixar o executável manualmente
 
-Baixe o arquivo **`WallpaperEngine-Linux-x86_64.run`** em [Releases](https://github.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/releases). Na pasta onde ele foi salvo:
+Baixe o arquivo **`WallpaperEngine-Linux-x86_64.run`** na página de versões:
+
+[![Download · Releases](https://img.shields.io/badge/Download%20%C2%B7%20Releases-16A34A?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/releases)
+
+Na pasta onde ele foi salvo:
 
 ```bash
 bash WallpaperEngine-Linux-x86_64.run --install-deps
@@ -207,7 +216,10 @@ Foram realizados testes locais da integração, dos shaders e da composição do
 
 ## Problemas, sugestões e contribuições
 
-Encontrou um erro, quer registrar uma reclamação ou sugerir uma melhoria? [Abra uma Issue no GitHub](https://github.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/issues/new/choose). Antes, confira se o problema já foi relatado.
+Encontrou um erro, quer registrar uma reclamação ou sugerir uma melhoria? Confira os relatos existentes ou abra uma Issue:
+
+[![Relatar problema](https://img.shields.io/badge/Relatar%20problema-DC2626?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/issues/new/choose)
+[![Ver relatos e sugestões](https://img.shields.io/badge/Ver%20relatos%20e%20sugest%C3%B5es-475569?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Ninjaagoo/Wallpaper-engine-Linux-plugin/issues)
 
 Informe sua distribuição, ambiente gráfico, GPU, versão instalada, nome ou link do wallpaper e os passos para reproduzir o problema. Se possível, inclua uma captura e o trecho relevante do log, removendo dados pessoais e tokens.
 
@@ -218,7 +230,7 @@ Contribuições são bem-vindas: você pode criar um fork, estudar e adaptar o c
 <table>
   <tr>
     <td><a href="https://github.com/Ninjaagoo"><img src="docs/media/ninjaagoo.png" width="80" height="80" alt="Foto de perfil de Ninjaagoo no GitHub"></a></td>
-    <td><strong><a href="https://github.com/Ninjaagoo">Ninjaagoo</a></strong><br>Desenvolvedor da integração e das adaptações locais.</td>
+    <td><a href="https://github.com/Ninjaagoo"><img src="https://img.shields.io/badge/Ninjaagoo-111111?style=for-the-badge&amp;logo=github&amp;logoColor=white" alt="Ninjaagoo no GitHub"></a><br>Desenvolvedor da integração e das adaptações locais.</td>
   </tr>
 </table>
 
@@ -226,9 +238,9 @@ O projeto reúne código existente, modificações locais e scripts de integraç
 
 | Projeto e autoria | Contribuição utilizada |
 |---|---|
-| [linux-wallpaperengine — Almamu e colaboradores](https://github.com/Almamu/linux-wallpaperengine) | Renderizador de wallpapers no Linux; fonte em `linux-wallpaperengine/`. |
-| [Wallpaper Engine for Wayland — diaslucass e colaboradores](https://github.com/diaslucass/wallpaperEngineWayland) | Base da extensão GNOME, adaptada em `wallpaper-linux/extension/`. |
-| [Application Wallpaper for Plasma 6 — Sebastian Krzyszkowiak e colaboradores](https://invent.kde.org/dos/plasma-wallpaper-application) | Addon da integração experimental com KDE, preservado em `wallpaper-linux/vendor/plasma-application/`. |
+| [![linux-wallpaperengine](https://img.shields.io/badge/linux--wallpaperengine-111111?style=flat-square&logo=github&logoColor=white)](https://github.com/Almamu/linux-wallpaperengine)<br>Almamu e colaboradores | Renderizador de wallpapers no Linux; fonte em `linux-wallpaperengine/`. |
+| [![Wallpaper Engine for Wayland](https://img.shields.io/badge/Wallpaper%20Engine%20for%20Wayland-111111?style=flat-square&logo=github&logoColor=white)](https://github.com/diaslucass/wallpaperEngineWayland)<br>diaslucass e colaboradores | Base da extensão GNOME, adaptada em `wallpaper-linux/extension/`. |
+| [![Application Wallpaper · Plasma 6](https://img.shields.io/badge/Application%20Wallpaper%20%C2%B7%20Plasma%206-111111?style=flat-square&logo=kde&logoColor=white)](https://invent.kde.org/dos/plasma-wallpaper-application)<br>Sebastian Krzyszkowiak e colaboradores | Addon da integração experimental com KDE, preservado em `wallpaper-linux/vendor/plasma-application/`. |
 
 Os créditos reconhecem o código utilizado; não indicam participação direta, parceria ou endosso dos autores originais a esta adaptação. As alterações locais não foram incorporadas aos repositórios originais.
 
