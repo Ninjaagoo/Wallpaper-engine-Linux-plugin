@@ -9,7 +9,7 @@ from pathlib import Path
 
 DIRETORIO_USUARIO = Path.home().resolve()
 DIRETORIO_DADOS = Path(os.environ.get('XDG_DATA_HOME', DIRETORIO_USUARIO / '.local/share'))
-ARQUIVO_CONFIGURACAO = DIRETORIO_USUARIO / '.config/wallpaper-engine/config.json'
+from paths import ARQUIVO_CONFIGURACAO, CONFIGURACAO_ANTIGA
 PLUGIN_KDE = 'net.dosowisko.PlasmaApplicationWallpaper'
 AMBIENTES_SUPORTADOS = ('gnome', 'kde', 'xfce')
 
@@ -17,6 +17,8 @@ AMBIENTES_SUPORTADOS = ('gnome', 'kde', 'xfce')
 def read_config():
     if ARQUIVO_CONFIGURACAO.exists():
         return json.loads(ARQUIVO_CONFIGURACAO.read_text())
+    if CONFIGURACAO_ANTIGA.exists():
+        return json.loads(CONFIGURACAO_ANTIGA.read_text())
     return {}
 
 

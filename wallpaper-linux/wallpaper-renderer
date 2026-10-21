@@ -11,7 +11,7 @@ from pathlib import Path
 
 DIRETORIO_USUARIO = Path.home().resolve()
 AMBIENTE_EXECUCAO = DIRETORIO_USUARIO / '.local/share/wallpaper-engine/runtime'
-ESTADO = DIRETORIO_USUARIO / '.local/state/wallpaper-engine'
+ESTADO = DIRETORIO_USUARIO / '.local/share/wallpaper-engine/state'
 IMAGEM = 'localhost/wallpaper-engine-runtime:fedora44'
 SERVICO_MONITOR = 'org.gnome.Mutter.DisplayConfig'
 CAMINHO_MONITOR = '/org/gnome/Mutter/DisplayConfig'

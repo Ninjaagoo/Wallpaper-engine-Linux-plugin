@@ -3,6 +3,7 @@ from pathlib import Path
 
 
 def add_install_arguments(analisador, pacote_offline=False):
+    analisador.add_argument('--install-deps', dest='instalar_dependencias', action='store_true', help='Instalar dependências ausentes com autenticação única')
     analisador.add_argument('--check', dest='verificar', action='store_true', help='Verificar sem instalar')
     analisador.add_argument('--desktop', dest='ambiente_grafico', choices=('auto', 'gnome', 'kde', 'xfce'), default='auto')
     analisador.add_argument('--steam-root', dest='raiz_steam', type=Path, help='Diretório Steam que contém steamapps')

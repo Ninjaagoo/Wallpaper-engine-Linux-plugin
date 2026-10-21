@@ -19,7 +19,7 @@ set -eu
 CAMINHO_INSTALADOR="$(readlink -f -- "$0")"
 case "${1:-}" in
   --help|-h)
-    printf '%s\n' 'Wallpaper Engine Linux — instalador offline x86_64' 'Uso: ./WallpaperEngine-Linux-x86_64.run [--check] [--desktop auto|gnome|kde|xfce] [--steam-root CAMINHO] [--kde-plugin] [--startup yes|no|ask] [--login-background] [--color auto|always|never]' '--verify: verificar integridade do pacote sem instalar.' 'Requisitos: Steam + Wallpaper Engine, Python 3/Pillow, Podman e Node.js; PyGObject no GNOME.'
+    printf '%s\n' 'Wallpaper Engine Linux — instalador offline x86_64' 'Uso: ./WallpaperEngine-Linux-x86_64.run [--check] [--desktop auto|gnome|kde|xfce] [--steam-root CAMINHO] [--kde-plugin] [--startup yes|no|ask] [--login-background] [--color auto|always|never] [--install-deps]' '--verify: verificar integridade do pacote sem instalar.' 'Requisitos: Steam + Wallpaper Engine, Python 3/Pillow, Podman e Node.js; PyGObject no GNOME.'
     exit 0 ;;
 esac
 if [ ! -t 1 ] && [ -z "${WE_INSTALLER_TERMINAL:-}" ] && [ "${1:-}" != '--check' ] && [ "${1:-}" != '--verify' ]; then
@@ -82,7 +82,7 @@ def create_payload(conteudo, imagem, trabalho):
     with tarfile.open(conteudo, 'w:gz', compresslevel=3) as arquivo_compactado:
         arquivo_compactado.add(PROJETO / 'wallpaper-linux', arcname='app/wallpaper-linux', filter=excluded)
         arquivo_compactado.add(PROJETO / 'linux-wallpaperengine', arcname='app/linux-wallpaperengine', filter=excluded)
-        for nome in ('README.md', 'Containerfile', 'tools', 'patches', '.gitmodules'):
+        for nome in ('README.md', 'Containerfile', 'tools', 'patches', '.gitmodules', 'install.sh'):
             arquivo_compactado.add(PROJETO / nome, arcname='app/' + nome, filter=excluded)
         arquivo_compactado.add(PROJETO / 'tools/package-bootstrap.py', arcname='package-bootstrap.py')
         arquivo_compactado.add(AMBIENTE_EXECUCAO, arcname='runtime')

@@ -17,7 +17,7 @@ from desktop_support import (detect_desktop, workshop_folder, wallpaper_app,
                              apply_static, kde_live_available, apply_kde_live, allow_current_gnome_session)
 
 DIRETORIO_USUARIO = Path.home().resolve()
-ESTADO = DIRETORIO_USUARIO / '.local/state/wallpaper-engine'
+from paths import ESTADO, FUNDOS
 UUID = 'wallpaperengine@waylandwe'
 EXTENSAO = DIRETORIO_USUARIO / '.local/share/gnome-shell/extensions' / UUID
 ESQUEMA = 'org.gnome.shell.extensions.wallpaperengine'
@@ -25,7 +25,6 @@ PORTA = 49367
 ARQUIVO_TOKEN = ESTADO / 'selection-token'
 ULTIMA_SELECAO = ESTADO / 'last-selection.json'
 FUNDO_LOGIN = Path('/var/lib/wallpaper-engine-login/background.png')
-FUNDOS = DIRETORIO_USUARIO / '.local/share/backgrounds/wallpaper-engine'
 ENDERECO_LOCAL = '127.0.0.1'
 INTERVALO_SELECAO_SEGUNDOS = 0.3
 TAMANHO_AMOSTRA = (80, 80)

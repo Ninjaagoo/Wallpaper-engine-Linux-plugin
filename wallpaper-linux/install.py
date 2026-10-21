@@ -9,7 +9,9 @@ import subprocess
 from pathlib import Path
 
 from install_progress import Progress
+from paths import ESTADO, EXECUTAVEIS, INTEGRACAO, migrate_legacy_paths
 from installation.options import add_install_arguments
+from installation.dependencies import install_dependencies, authenticate_once
 from installation.requirements import check_host_requirements
 from installation.runtime import IMAGEM, AMBIENTE_EXECUCAO, build_runtime as build_container_runtime
 
@@ -22,9 +24,7 @@ UUID = 'wallpaperengine@waylandwe'
 ESQUEMA = 'org.gnome.shell.extensions.wallpaperengine'
 STEAM = DIRETORIO_USUARIO / '.local/share/Steam/steamapps'
 EXTENSAO = DIRETORIO_USUARIO / '.local/share/gnome-shell/extensions' / UUID
-ESTADO = DIRETORIO_USUARIO / '.local/state/wallpaper-engine'
 DIRETORIO_EXECUTAVEIS = DIRETORIO_USUARIO / '.local/bin'
-INTEGRACAO = DIRETORIO_USUARIO / '.local/share/wallpaper-engine/integration'
 UNIDADES = DIRETORIO_USUARIO / '.config/systemd/user'
 SCRIPTS_INTERFACE = STEAM / 'common/wallpaper_engine/ui/dist/scripts/scripts.js'
 NOME_SERVICO = 'wallpaper-selection-sync.service'
@@ -43,7 +43,7 @@ def check_requirements(plugin_kde=False):
     for caminho in (PROJETO / 'extension/metadata.json', PROJETO / 'extension/extension.js',
                  PROJETO / 'extension/prefs.js', PROJETO / 'extension/schemas',
                  PROJETO / 'selection-sync.py', PROJETO / 'wallpaper-renderer',
-                 PROJETO / 'desktop_support.py', PROJETO / 'session-start.py',
+                 PROJETO / 'desktop_support.py', PROJETO / 'session-start.py', PROJETO / 'paths.py',
                  PROJETO / 'installation/options.py', PROJETO / 'installation/gdm.py',
                  SCRIPTS_INTERFACE):
         if not caminho.exists():
@@ -78,9 +78,14 @@ def install_extension():
 
 def install_launchers():
     DIRETORIO_EXECUTAVEIS.mkdir(parents=True, exist_ok=True)
+    EXECUTAVEIS.mkdir(parents=True, exist_ok=True)
     for nome in ('wallpaper-renderer', 'wallpaper-mpv'):
-        shutil.copy2(PROJETO / 'wallpaper-renderer', DIRETORIO_EXECUTAVEIS / nome)
-        (DIRETORIO_EXECUTAVEIS / nome).chmod(0o755)
+        destino = EXECUTAVEIS / nome
+        shutil.copy2(PROJETO / 'wallpaper-renderer', destino)
+        destino.chmod(0o755)
+        entrada = DIRETORIO_EXECUTAVEIS / nome
+        entrada.unlink(missing_ok=True)
+        entrada.symlink_to(destino)
 
 
 def install_desktop_entries():
@@ -88,13 +93,13 @@ def install_desktop_entries():
     aplicativos.mkdir(parents=True, exist_ok=True)
     (aplicativos / 'wallpaper-engine-linux.desktop').write_text(
         '[Desktop Entry]\nType=Application\nName=Wallpaper Engine Linux\n'
-        f'Exec="{DIRETORIO_EXECUTAVEIS / 'wallpaper-engine-start'}" --open\nIcon=preferences-desktop-wallpaper\n'
+        f'Exec="{DIRETORIO_EXECUTAVEIS / "wallpaper-engine-start"}" --open\nIcon=preferences-desktop-wallpaper\n'
         'Categories=Settings;DesktopSettings;\nTerminal=false\n')
     inicio_automatico = DIRETORIO_USUARIO / '.config/autostart'
     inicio_automatico.mkdir(parents=True, exist_ok=True)
     (inicio_automatico / 'wallpaper-engine-linux.desktop').write_text(
         '[Desktop Entry]\nType=Application\nName=Wallpaper Engine Linux\n'
-        f'Exec="{DIRETORIO_EXECUTAVEIS / 'wallpaper-engine-start'}" --autostart\n'
+        f'Exec="{DIRETORIO_EXECUTAVEIS / "wallpaper-engine-start"}" --autostart\n'
         'X-GNOME-Autostart-enabled=true\nTerminal=false\nStartupNotify=false\n')
 
 
@@ -127,10 +132,15 @@ def patch_wallpaper_interface():
 
 def install_sync_files():
     INTEGRACAO.mkdir(parents=True, exist_ok=True)
-    for nome in ('selection-sync.py', 'desktop_support.py'):
+    for nome in ('selection-sync.py', 'desktop_support.py', 'paths.py'):
         shutil.copy2(PROJETO / nome, INTEGRACAO / nome)
-    shutil.copy2(PROJETO / 'session-start.py', DIRETORIO_EXECUTAVEIS / 'wallpaper-engine-start')
-    (DIRETORIO_EXECUTAVEIS / 'wallpaper-engine-start').chmod(0o755)
+    EXECUTAVEIS.mkdir(parents=True, exist_ok=True)
+    destino = EXECUTAVEIS / 'wallpaper-engine-start'
+    shutil.copy2(PROJETO / 'session-start.py', destino)
+    destino.chmod(0o755)
+    entrada = DIRETORIO_EXECUTAVEIS / 'wallpaper-engine-start'
+    entrada.unlink(missing_ok=True)
+    entrada.symlink_to(destino)
     install_desktop_entries()
 
 
@@ -201,8 +211,11 @@ def configure_login_background():
         temporario.replace(compartilhado)
     else:
         print('Configurando o fundo do GDM: será solicitada autenticação de administrador.', flush=True)
-        subprocess.run(['pkexec', '/usr/bin/python3', str(PROJETO / 'installation/gdm.py'),
-                        '--image', str(destino)], check=True)
+        if os.environ.get('WE_SUDO_AUTHENTICATED') == '1':
+            comando = ['sudo', '-n', 'env', f'PKEXEC_UID={os.getuid()}', '/usr/bin/python3']
+        else:
+            comando = ['pkexec', '/usr/bin/python3']
+        subprocess.run(comando + [str(PROJETO / 'installation/gdm.py'), '--image', str(destino)], check=True)
     print('Tela de login sincronizada com a prévia selecionada (imagem estática).')
 
 
@@ -230,7 +243,9 @@ def configure_startup(escolha, configuracao):
             print('A preferência será aplicada pelo autostart XDG; systemd de usuário indisponível.')
     if AMBIENTE_GRAFICO == 'gnome':
         # GNOME itself restores enabled extensions at the next login.
-        subprocess.run(['gnome-extensions', 'enable' if ativado else 'disable', UUID], check=True)
+        resultado = subprocess.run(['gnome-extensions', 'enable' if ativado else 'disable', UUID], check=False)
+        if resultado.returncode != 0:
+            print('O GNOME ainda não carregou a extensão. Saia e entre na sessão para concluir a ativação.')
     print('Início automático ativado.' if ativado else 'Início automático desativado. Abra pelo menu quando desejar.')
 
 
@@ -257,6 +272,8 @@ def main():
     STEAM = raiz / 'steamapps'
     SCRIPTS_INTERFACE = aplicativo / 'ui/dist/scripts/scripts.js'
     PRECISA_RENDERIZADOR = AMBIENTE_GRAFICO == 'gnome' or (AMBIENTE_GRAFICO == 'kde' and (argumentos_cli.plugin_kde or kde_live_available()))
+    if argumentos_cli.instalar_dependencias and not argumentos_cli.verificar:
+        install_dependencies(AMBIENTE_GRAFICO, PRECISA_RENDERIZADOR and not RENDERIZADOR_NATIVO, argumentos_cli.fundo_login)
     if argumentos_cli.compilar_ambiente and not argumentos_cli.verificar:
         progresso.update(10, "Compilando renderizador e dependências no contêiner (pode demorar)…")
         build_runtime()
@@ -267,6 +284,7 @@ def main():
         progresso.update(100, 'Verificação concluída. Nenhuma instalação realizada.')
         print('KDE/XFCE precisam de validação no ambiente de destino.')
         return
+    migrate_legacy_paths()
     progresso.update(45, "Salvando configuração da integração…")
     configuracao.update(desktop=argumentos_cli.ambiente_grafico, steam_root=str(raiz), renderer=RENDERIZADOR_NATIVO)
     ARQUIVO_CONFIGURACAO.parent.mkdir(parents=True, exist_ok=True)
@@ -278,6 +296,8 @@ def main():
     install_extension()
     progresso.update(80, "Conectando seleção de wallpapers e configurando início automático…")
     install_selection_sync()
+    if argumentos_cli.fundo_login and argumentos_cli.instalar_dependencias:
+        authenticate_once()
     if AMBIENTE_GRAFICO == 'gnome' and (argumentos_cli.fundo_login or Path('/usr/local/share/gnome-shell/extensions/firewatch-login@local').is_dir()):
         progresso.update(90, 'Atualizando imagem da tela de login…')
         configure_login_background()

@@ -12,6 +12,7 @@ from desktop_support import detect_desktop, steam_root, wallpaper_app
 from install_progress import Progress
 from .options import add_install_arguments
 from .requirements import check_host_requirements
+from .dependencies import install_dependencies
 from .runtime import AMBIENTE_EXECUCAO, IMAGEM, import_runtime_image, install_runtime
 
 DESTINO = Path.home() / '.local/share/wallpaper-engine/package'
@@ -26,6 +27,8 @@ def check_package(raiz, argumentos_cli):
     ambiente_grafico = detect_desktop(argumentos_cli.ambiente_grafico)
     steam = steam_root(argumentos_cli.raiz_steam)
     wallpaper_app(steam)
+    if argumentos_cli.instalar_dependencias and not argumentos_cli.verificar:
+        install_dependencies(ambiente_grafico, True, argumentos_cli.fundo_login)
     check_host_requirements(ambiente_grafico, True, raiz / 'app/wallpaper-linux/extension', argumentos_cli.plugin_kde)
     subprocess.run(['podman', 'info', '--format', '{{.Host.Arch}}'], check=True, stdout=subprocess.DEVNULL)
     print(f'Pacote verificado: {ambiente_grafico}, {manifesto["machine"]}, Steam em {steam}', flush=True)

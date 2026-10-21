@@ -9,6 +9,7 @@ INTEGRACAO = Path.home() / '.local/share/wallpaper-engine/integration'
 SERVICO = 'wallpaper-selection-sync.service'
 sys.path.insert(0, str(INTEGRACAO))
 from desktop_support import detect_desktop, read_config, allow_current_gnome_session
+from paths import ESTADO
 
 
 def main():
@@ -30,7 +31,7 @@ def main():
         resultado = subprocess.run(['systemctl', '--user', 'start', SERVICO], capture_output=True)
         if resultado.returncode == 0:
             return
-    estado = Path.home() / '.local/state/wallpaper-engine'
+    estado = ESTADO
     estado.mkdir(parents=True, exist_ok=True)
     with (estado / 'selection-sync.log').open('a') as registro:
         subprocess.Popen([sys.executable, str(INTEGRACAO / 'selection-sync.py')],

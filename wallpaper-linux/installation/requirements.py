@@ -12,7 +12,7 @@ COMANDOS_DBUS = ('qdbus6', 'qdbus-qt6', 'qdbus', 'gdbus')
 def check_host_requirements(ambiente_grafico, precisa_conteiner, origem_extensao, plugin_kde=False):
     comandos = ['node']
     if precisa_conteiner:
-        comandos.append('podman')
+        comandos.extend(('podman', 'Xwayland'))
     if ambiente_grafico == 'gnome':
         comandos.extend(COMANDOS_GNOME)
     elif ambiente_grafico == 'xfce':
